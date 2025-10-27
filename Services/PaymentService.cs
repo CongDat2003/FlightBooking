@@ -1,6 +1,6 @@
 ﻿using FlightBooking.Configuration;
 using FlightBooking.DTOs;
-//using FlightBooking.Helpers;
+using FlightBooking.Helpers;
 using FlightBooking.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -13,20 +13,20 @@ namespace FlightBooking.Services
     public class PaymentService : IPaymentService
     {
         private readonly FlightBookingContext _context;
-        //private readonly IOptions<VNPayConfig> _vnpayConfig;
+        private readonly IOptions<VNPayConfig> _vnpayConfig;
         private readonly IOptions<MoMoConfig> _momoConfig;
         private readonly IOptions<ZaloPayConfig> _zalopayConfig;
         private readonly ILogger<PaymentService> _logger;
 
         public PaymentService(
             FlightBookingContext context,
-            //IOptions<VNPayConfig> vnpayConfig,
+            IOptions<VNPayConfig> vnpayConfig,
             IOptions<MoMoConfig> momoConfig,
             IOptions<ZaloPayConfig> zalopayConfig,
             ILogger<PaymentService> logger)
         {
             _context = context;
-           // _vnpayConfig = vnpayConfig;
+            _vnpayConfig = vnpayConfig;
             _momoConfig = momoConfig;
             _zalopayConfig = zalopayConfig;
             _logger = logger;
@@ -54,6 +54,10 @@ namespace FlightBooking.Services
 
             // Generate payment URL based on payment method
             var paymentUrl = await GeneratePaymentUrlAsync(payment, paymentDto);
+            
+            // Save PaymentUrl to database
+            payment.PaymentUrl = paymentUrl;
+            await _context.SaveChangesAsync();
 
             return new PaymentResponseDto
             {
@@ -104,7 +108,8 @@ namespace FlightBooking.Services
         {
             switch (paymentDto.PaymentMethod.ToUpper())
             {
-                //case "VNPAY":return await GenerateVNPayUrlAsync(payment, paymentDto);
+                case "VNPAY":
+                    return await GenerateVNPayUrlAsync(payment, paymentDto);
                 case "MOMO":
                     return await GenerateMoMoUrlAsync(payment, paymentDto);
                 case "ZALOPAY":
@@ -113,30 +118,7 @@ namespace FlightBooking.Services
                     throw new NotSupportedException($"Payment method {paymentDto.PaymentMethod} is not supported");
             }
         }
-        /*
-                private async Task<string> GenerateVNPayUrlAsync(Payment payment, CreatePaymentDto paymentDto)
-                {
-                    var config = _vnpayConfig.Value;
-
-                    var vnpay = new VnPayLibrary();
-                    vnpay.AddRequestData("vnp_Version", config.Version);
-                    vnpay.AddRequestData("vnp_Command", config.Command);
-                    vnpay.AddRequestData("vnp_TmnCode", config.TmnCode);
-                    vnpay.AddRequestData("vnp_Amount", ((long)(payment.Amount * 100)).ToString());
-                    vnpay.AddRequestData("vnp_CreateDate", DateTime.Now.ToString("yyyyMMddHHmmss"));
-                    vnpay.AddRequestData("vnp_CurrCode", config.CurrCode);
-                    vnpay.AddRequestData("vnp_IpAddr", "127.0.0.1");
-                    vnpay.AddRequestData("vnp_Locale", config.Locale);
-                    vnpay.AddRequestData("vnp_OrderInfo", $"Thanh toan ve may bay - Ma booking: {payment.Booking.BookingReference}");
-                    vnpay.AddRequestData("vnp_OrderType", "other");
-                    vnpay.AddRequestData("vnp_ReturnUrl", paymentDto.ReturnUrl ?? config.ReturnUrl);
-                    vnpay.AddRequestData("vnp_TxnRef", payment.TransactionId);
-
-                    return vnpay.CreateRequestUrl(config.Url, config.HashSecret);
-                }*/
-
-        // Services/PaymentService.cs - Sửa method GenerateVNPayUrlAsync
-/*        private async Task<string> GenerateVNPayUrlAsync(Payment payment, CreatePaymentDto paymentDto)
+        private async Task<string> GenerateVNPayUrlAsync(Payment payment, CreatePaymentDto paymentDto)
         {
             var config = _vnpayConfig.Value;
             var booking = await _context.Bookings.FindAsync(payment.BookingId);
@@ -162,7 +144,8 @@ namespace FlightBooking.Services
             vnpay.AddRequestData("vnp_TxnRef", payment.TransactionId);
 
             return vnpay.CreateRequestUrl(config.Url, config.HashSecret);
-        }*/
+        }
+
 
 
         /*private async Task<string> GenerateMoMoUrlAsync(Payment payment, CreatePaymentDto paymentDto)
@@ -403,6 +386,50 @@ namespace FlightBooking.Services
 
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<List<PaymentResponseDto>> GetAllPaymentsAsync()
+        {
+            var payments = await _context.Payments
+                .Include(p => p.Booking)
+                    .ThenInclude(b => b.User)
+                .Include(p => p.Booking)
+                    .ThenInclude(b => b.Flight)
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+
+            return payments.Select(p => new PaymentResponseDto
+            {
+                PaymentId = p.PaymentId,
+                TransactionId = p.TransactionId,
+                PaymentUrl = p.PaymentUrl,
+                Status = p.Status,
+                Amount = p.Amount,
+                CreatedAt = p.CreatedAt
+            }).ToList();
+        }
+
+        public async Task<PaymentResponseDto> GetPaymentByIdAsync(int paymentId)
+        {
+            var payment = await _context.Payments
+                .Include(p => p.Booking)
+                    .ThenInclude(b => b.User)
+                .Include(p => p.Booking)
+                    .ThenInclude(b => b.Flight)
+                .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
+
+            if (payment == null)
+                throw new ArgumentException("Payment not found");
+
+            return new PaymentResponseDto
+            {
+                PaymentId = payment.PaymentId,
+                TransactionId = payment.TransactionId,
+                PaymentUrl = payment.PaymentUrl,
+                Status = payment.Status,
+                Amount = payment.Amount,
+                CreatedAt = payment.CreatedAt
+            };
         }
     }
 }

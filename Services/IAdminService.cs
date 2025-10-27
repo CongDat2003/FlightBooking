@@ -25,6 +25,7 @@ namespace FlightBooking.Services
         Task<List<AdminUserResponseDto>> GetAllUsersAsync(int page = 1, int pageSize = 10);
         Task<AdminUserResponseDto> GetUserByIdAsync(int userId);
         Task<AdminUserResponseDto> UpdateUserStatusAsync(int userId, UpdateUserStatusDto statusDto);
+        Task<bool> DeleteUserAsync(int userId);
 
         // Reports
         Task<List<RevenueByMonthDto>> GetRevenueReportAsync(int year);

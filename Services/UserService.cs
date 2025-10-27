@@ -50,6 +50,7 @@ namespace FlightBooking.Services
                 Phone = user.Phone,
                 DateOfBirth = user.DateOfBirth,
                 Gender = user.Gender,
+                Role = user.Role, // Thêm Role
                 CreatedAt = user.CreatedAt ?? DateTime.Now,
                 TotalBookings = 0
             };
@@ -78,6 +79,7 @@ namespace FlightBooking.Services
                 Phone = user.Phone,
                 DateOfBirth = user.DateOfBirth,
                 Gender = user.Gender,
+                Role = user.Role, // Thêm Role
                 CreatedAt = user.CreatedAt ?? DateTime.Now,
                 TotalBookings = user.Bookings.Count
             };
@@ -101,6 +103,7 @@ namespace FlightBooking.Services
                 Phone = user.Phone,
                 DateOfBirth = user.DateOfBirth,
                 Gender = user.Gender,
+                Role = user.Role, // Thêm Role
                 CreatedAt = user.CreatedAt ?? DateTime.Now,
                 TotalBookings = user.Bookings.Count
             };

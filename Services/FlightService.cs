@@ -193,7 +193,49 @@ namespace FlightBooking.Services
             return $"VN{DateTime.Now:ddMMyyyy}{new Random().Next(1000, 9999)}";
         }
 
-        private async Task<BookingResponseDto> GetBookingByIdAsync(int bookingId)
+        public async Task<List<BookingResponseDto>> GetAllBookingsAsync()
+        {
+            var bookings = await _context.Bookings
+                .Include(b => b.Flight)
+                    .ThenInclude(f => f.Airline)
+                .Include(b => b.Flight.DepartureAirport)
+                .Include(b => b.Flight.ArrivalAirport)
+                .Include(b => b.BookingSeats)
+                    .ThenInclude(bs => bs.Seat)
+                        .ThenInclude(s => s.Class)
+                .Include(b => b.User)
+                .OrderByDescending(b => b.BookingDate)
+                .ToListAsync();
+
+            return bookings.Select(booking => new BookingResponseDto
+            {
+                BookingId = booking.BookingId,
+                BookingReference = booking.BookingReference,
+                BookingStatus = booking.BookingStatus,
+                TotalAmount = booking.TotalAmount,
+                PaymentStatus = booking.PaymentStatus,
+                BookingDate = booking.BookingDate ?? DateTime.Now,
+                Flight = new FlightResponseDto
+                {
+                    FlightId = booking.Flight.FlightId,
+                    FlightNumber = booking.Flight.FlightNumber,
+                    AirlineName = booking.Flight.Airline.AirlineName,
+                    DepartureAirport = booking.Flight.DepartureAirport.AirportName,
+                    ArrivalAirport = booking.Flight.ArrivalAirport.AirportName,
+                    DepartureTime = booking.Flight.DepartureTime,
+                    ArrivalTime = booking.Flight.ArrivalTime
+                },
+                Seats = booking.BookingSeats.Select(bs => new BookedSeatDto
+                {
+                    SeatNumber = bs.Seat.SeatNumber,
+                    SeatClassName = bs.Seat.Class.ClassName,
+                    PassengerName = bs.PassengerName,
+                    SeatPrice = bs.SeatPrice
+                }).ToList()
+            }).ToList();
+        }
+
+        public async Task<BookingResponseDto> GetBookingByIdAsync(int bookingId)
         {
             var booking = await _context.Bookings
                 .Include(b => b.Flight)
@@ -276,6 +318,38 @@ namespace FlightBooking.Services
                     SeatPrice = bs.SeatPrice
                 }).ToList()
             }).ToList();
+        }
+
+        public async Task<bool> UpdateBookingStatusAsync(int bookingId, string status)
+        {
+            var booking = await _context.Bookings.FindAsync(bookingId);
+            if (booking == null)
+                return false;
+
+            booking.BookingStatus = status;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> CancelBookingAsync(int bookingId)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.BookingSeats)
+                    .ThenInclude(bs => bs.Seat)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+            if (booking == null)
+                return false;
+
+            // Free up seats
+            foreach (var bookingSeat in booking.BookingSeats)
+            {
+                bookingSeat.Seat.IsAvailable = true;
+            }
+
+            booking.BookingStatus = "CANCELLED";
+            await _context.SaveChangesAsync();
+            return true;
         }
 
         public async Task<bool> ConfirmPaymentAsync(int paymentId)

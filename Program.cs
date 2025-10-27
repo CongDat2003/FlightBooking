@@ -36,7 +36,7 @@ builder.Services.AddScoped<ISMSService, SMSService>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 
 // Add configuration for payment gateways
-//builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
+builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
 builder.Services.Configure<MoMoConfig>(builder.Configuration.GetSection("MoMo"));
 builder.Services.Configure<ZaloPayConfig>(builder.Configuration.GetSection("ZaloPay"));
 
@@ -69,8 +69,8 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
