@@ -34,6 +34,9 @@ public partial class User
     [StringLength(10)]
     public string? Gender { get; set; }
 
+    [StringLength(20)]
+    public string Role { get; set; } = "Customer"; // Thêm role với giá trị mặc định
+
     public DateTime? CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime? UpdatedAt { get; set; } = DateTime.Now;

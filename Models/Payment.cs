@@ -33,6 +33,9 @@ namespace FlightBooking.Models
         [StringLength(1000)]
         public string? PaymentData { get; set; } // JSON data from payment gateway
 
+        [StringLength(1000)]
+        public string? PaymentUrl { get; set; } // URL to redirect for payment
+
         // Navigation properties
         [ForeignKey("BookingId")]
         public virtual Booking Booking { get; set; }

@@ -48,6 +48,7 @@ namespace FlightBooking.DTOs.User
         public string? Phone { get; set; }
         public DateOnly? DateOfBirth { get; set; }
         public string? Gender { get; set; }
+        public string Role { get; set; } // Thêm Role vào DTO
         public DateTime CreatedAt { get; set; }
         public int TotalBookings { get; set; }
     }

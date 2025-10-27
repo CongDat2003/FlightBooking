@@ -481,6 +481,7 @@ namespace FlightBooking.Services
         public async Task<List<AdminUserResponseDto>> GetAllUsersAsync(int page = 1, int pageSize = 10)
         {
             var users = await _context.Users
+                .Where(u => u.Role == "Customer") // Chỉ lấy Customer, không lấy Admin
                 .Include(u => u.Bookings.Where(b => b.PaymentStatus == "PAID"))
                 .OrderByDescending(u => u.CreatedAt)
                 .Skip((page - 1) * pageSize)
@@ -541,6 +542,40 @@ namespace FlightBooking.Services
 
             await _context.SaveChangesAsync();
             return await GetUserByIdAsync(userId);
+        }
+
+        public async Task<bool> DeleteUserAsync(int userId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            
+            try
+            {
+                var user = await _context.Users
+                    .Include(u => u.Bookings)
+                    .FirstOrDefaultAsync(u => u.UserId == userId);
+
+                if (user == null) return false;
+
+                // Kiểm tra role - không cho phép xóa Admin
+                if (user.Role == "Admin")
+                    throw new InvalidOperationException("Cannot delete admin user");
+
+                // Kiểm tra có booking confirmed không
+                if (user.Bookings.Any(b => b.BookingStatus == "CONFIRMED"))
+                    throw new InvalidOperationException("Cannot delete user with confirmed bookings");
+
+                // Xóa user
+                _context.Users.Remove(user);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<List<RevenueByMonthDto>> GetRevenueReportAsync(int year)

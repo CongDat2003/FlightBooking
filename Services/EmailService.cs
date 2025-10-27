@@ -70,6 +70,12 @@ namespace FlightBooking.Services
 
                 using var client = new SmtpClient();
 
+                // Configure SSL certificate validation callback if needed
+                if (_emailSettings.IgnoreSslCertificateErrors)
+                {
+                    client.ServerCertificateValidationCallback = (s, c, h, e) => true;
+                }
+
                 // Connect to SMTP server
                 await client.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.SmtpPort,
                     _emailSettings.EnableSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.None);
