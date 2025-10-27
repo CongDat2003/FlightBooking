@@ -53,6 +53,31 @@ namespace FlightBooking.Controllers.User
             }
         }
 
+        [HttpPost("login-admin")]
+        public async Task<ActionResult<UserProfileDto>> LoginAdmin([FromBody] LoginDto loginDto)
+        {
+            try
+            {
+                var user = await _userService.LoginAsync(loginDto);
+                
+                // Kiểm tra role Admin
+                if (user.Role != "Admin")
+                {
+                    return Unauthorized(new { message = "Chỉ Admin mới có quyền truy cập Admin Panel" });
+                }
+                
+                return Ok(user);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpGet("profile/{userId}")]
         public async Task<ActionResult<UserProfileDto>> GetProfile(int userId)
         {

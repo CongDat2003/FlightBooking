@@ -1,6 +1,7 @@
 ﻿using FlightBooking.DTOs;
 using FlightBooking.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace FlightBooking.Controllers
 {
@@ -13,6 +14,38 @@ namespace FlightBooking.Controllers
         public PaymentController(IPaymentService paymentService)
         {
             _paymentService = paymentService;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<List<PaymentResponseDto>>> GetAllPayments()
+        {
+            try
+            {
+                var payments = await _paymentService.GetAllPaymentsAsync();
+                return Ok(payments);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while retrieving payments.", detail = ex.Message });
+            }
+        }
+
+        [HttpGet("{paymentId}")]
+        public async Task<ActionResult<PaymentResponseDto>> GetPaymentById(int paymentId)
+        {
+            try
+            {
+                var payment = await _paymentService.GetPaymentByIdAsync(paymentId);
+                return Ok(payment);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while retrieving payment.", detail = ex.Message });
+            }
         }
 
         [HttpPost("create")]

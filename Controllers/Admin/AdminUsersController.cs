@@ -64,5 +64,26 @@ namespace FlightBooking.Controllers.Admin
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpDelete("{userId}")]
+        public async Task<ActionResult> DeleteUser(int userId)
+        {
+            try
+            {
+                var success = await _adminService.DeleteUserAsync(userId);
+                if (success)
+                    return Ok(new { message = "User deleted successfully" });
+                else
+                    return BadRequest(new { message = "Failed to delete user" });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }

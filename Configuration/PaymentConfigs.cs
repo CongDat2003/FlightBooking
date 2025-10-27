@@ -1,6 +1,6 @@
 ﻿namespace FlightBooking.Configuration
 {
-/*    public class VNPayConfig
+    public class VNPayConfig
     {
         public string TmnCode { get; set; }
         public string HashSecret { get; set; }
@@ -10,7 +10,7 @@
         public string Command { get; set; } = "pay";
         public string CurrCode { get; set; } = "VND";
         public string Locale { get; set; } = "vn";
-    }*/
+    }
 
     public class MoMoConfig
     {

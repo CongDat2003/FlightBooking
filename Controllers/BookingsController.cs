@@ -1,4 +1,5 @@
 ﻿using FlightBooking.DTOs;
+using FlightBooking.DTOs.Admin;
 using FlightBooking.Services;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -39,6 +40,20 @@ namespace FlightBooking.Controllers
             }
         }
 
+        [HttpGet]
+        public async Task<ActionResult<List<BookingResponseDto>>> GetAllBookings()
+        {
+            try
+            {
+                var bookings = await _flightService.GetAllBookingsAsync();
+                return Ok(bookings);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while retrieving bookings.", detail = ex.Message });
+            }
+        }
+
         [HttpGet("user/{userId}")]
         public async Task<ActionResult<List<BookingResponseDto>>> GetUserBookings(int userId)
         {
@@ -50,6 +65,57 @@ namespace FlightBooking.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "An error occurred while retrieving bookings.", detail = ex.Message });
+            }
+        }
+
+        [HttpGet("{bookingId}")]
+        public async Task<ActionResult<BookingResponseDto>> GetBookingById(int bookingId)
+        {
+            try
+            {
+                var booking = await _flightService.GetBookingByIdAsync(bookingId);
+                if (booking == null)
+                    return NotFound(new { message = "Booking not found" });
+                
+                return Ok(booking);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while retrieving booking.", detail = ex.Message });
+            }
+        }
+
+        [HttpPut("{bookingId}/status")]
+        public async Task<ActionResult> UpdateBookingStatus(int bookingId, [FromBody] UpdateBookingStatusDto statusDto)
+        {
+            try
+            {
+                var result = await _flightService.UpdateBookingStatusAsync(bookingId, statusDto.BookingStatus);
+                if (!result)
+                    return NotFound(new { message = "Booking not found" });
+                
+                return Ok(new { message = "Booking status updated successfully" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while updating booking status.", detail = ex.Message });
+            }
+        }
+
+        [HttpDelete("{bookingId}")]
+        public async Task<ActionResult> CancelBooking(int bookingId)
+        {
+            try
+            {
+                var result = await _flightService.CancelBookingAsync(bookingId);
+                if (!result)
+                    return NotFound(new { message = "Booking not found" });
+                
+                return Ok(new { message = "Booking cancelled successfully" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while cancelling booking.", detail = ex.Message });
             }
         }
     }
