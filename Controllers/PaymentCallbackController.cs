@@ -1,4 +1,4 @@
-﻿/*using FlightBooking.Configuration;
+﻿using FlightBooking.Configuration;
 using FlightBooking.DTOs;
 using FlightBooking.Helpers;
 using FlightBooking.Services;
@@ -15,20 +15,17 @@ namespace FlightBooking.Controllers
         private readonly IPaymentService _paymentService;
         private readonly IOptions<VNPayConfig> _vnpayConfig;
         private readonly IOptions<ZaloPayConfig> _zalopayConfig; 
-        private readonly IOptions<MoMoConfig> _momoConfig; 
         private readonly ILogger<PaymentCallbackController> _logger; 
 
         public PaymentCallbackController(
             IPaymentService paymentService,
             IOptions<VNPayConfig> vnpayConfig,
             IOptions<ZaloPayConfig> zalopayConfig, 
-            IOptions<MoMoConfig> momoConfig, 
             ILogger<PaymentCallbackController> logger) 
         {
             _paymentService = paymentService;
             _vnpayConfig = vnpayConfig;
             _zalopayConfig = zalopayConfig; 
-            _momoConfig = momoConfig; 
             _logger = logger; 
         }
 
@@ -228,47 +225,6 @@ namespace FlightBooking.Controllers
             }
         }
 
-        // Controllers/PaymentCallbackController.cs - Sửa MoMoCallback method
-        [HttpPost("momo-callback")]
-        public async Task<IActionResult> MoMoCallback([FromBody] MoMoCallbackDto callback)
-        {
-            try
-            {
-                var config = _momoConfig.Value;
-
-                // Verify signature
-                var rawSignature = $"accessKey={config.AccessKey}&amount={callback.amount}&extraData={callback.extraData}&message={callback.message}&orderId={callback.orderId}&orderInfo={callback.orderInfo}&orderType={callback.orderType}&partnerCode={callback.partnerCode}&payType={callback.payType}&requestId={callback.requestId}&responseTime={callback.responseTime}&resultCode={callback.resultCode}&transId={callback.transId}";
-
-                var signature = ComputeHmacSha256(rawSignature, config.SecretKey);
-
-                if (signature.Equals(callback.signature))
-                {
-                    var callbackDto = new PaymentCallbackDto
-                    {
-                        TransactionId = callback.orderId,
-                        Status = callback.resultCode == 0 ? "SUCCESS" : "FAILED", // SỬA: So sánh với int
-                        ResponseCode = callback.resultCode.ToString(), // SỬA: Convert int sang string
-                        Message = callback.message,
-                        AdditionalData = new Dictionary<string, string>
-                {
-                    {"transId", callback.transId.ToString()},
-                    {"payType", callback.payType}
-                }
-                    };
-
-                    await _paymentService.ProcessCallbackAsync(callbackDto);
-
-                    return Ok(new { message = "success" });
-                }
-
-                return BadRequest("Invalid signature");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "MoMo callback error");
-                return BadRequest("Error processing callback");
-            }
-        }
 
         private string ComputeHmacSha256(string message, string key)
         {
@@ -281,4 +237,3 @@ namespace FlightBooking.Controllers
         }
     }
 }
-*/

@@ -6,6 +6,8 @@
         public string PaymentMethod { get; set; }
         public string ReturnUrl { get; set; }
         public string CancelUrl { get; set; }
+        // Optional: VNPay channel selector (sandbox demo): VNPAYQR | VNBANK | INTCARD
+        public string? BankCode { get; set; }
     }
 
     public class PaymentResponseDto

@@ -1,4 +1,4 @@
-﻿/*namespace FlightBooking.DTOs
+﻿namespace FlightBooking.DTOs
 {
     public class ZaloPayCallbackDto
     {
@@ -41,4 +41,3 @@
         public string signature { get; set; }
     }
 }
-*/

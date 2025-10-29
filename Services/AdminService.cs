@@ -216,7 +216,7 @@ namespace FlightBooking.Services
                 DepartureTime = f.DepartureTime,
                 ArrivalTime = f.ArrivalTime,
                 BasePrice = f.BasePrice,
-                Status = f.Status,
+                Status = DetermineFlightStatus(f),
                 Gate = f.Gate,
                 TotalSeats = f.Seats.Count,
                 BookedSeats = f.Seats.Count(s => s.IsAvailable.HasValue && !s.IsAvailable.Value),
@@ -251,7 +251,7 @@ namespace FlightBooking.Services
                 DepartureTime = flight.DepartureTime,
                 ArrivalTime = flight.ArrivalTime,
                 BasePrice = flight.BasePrice,
-                Status = flight.Status,
+                Status = DetermineFlightStatus(flight),
                 Gate = flight.Gate,
                 TotalSeats = flight.Seats.Count,
                 BookedSeats = flight.Seats.Count(s => s.IsAvailable.HasValue && !s.IsAvailable.Value),
@@ -482,7 +482,7 @@ namespace FlightBooking.Services
         {
             var users = await _context.Users
                 .Where(u => u.Role == "Customer") // Chỉ lấy Customer, không lấy Admin
-                .Include(u => u.Bookings.Where(b => b.PaymentStatus == "PAID"))
+                .Include(u => u.Bookings) // Lấy tất cả bookings, không filter theo PaymentStatus
                 .OrderByDescending(u => u.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -508,7 +508,7 @@ namespace FlightBooking.Services
         public async Task<AdminUserResponseDto> GetUserByIdAsync(int userId)
         {
             var user = await _context.Users
-                .Include(u => u.Bookings.Where(b => b.PaymentStatus == "PAID"))
+                .Include(u => u.Bookings) // Lấy tất cả bookings, không filter theo PaymentStatus
                 .FirstOrDefaultAsync(u => u.UserId == userId);
 
             if (user == null)
@@ -636,6 +636,15 @@ namespace FlightBooking.Services
                 .OrderByDescending(r => r.BookingCount)
                 .Take(topCount)
                 .ToListAsync();
+        }
+        private static string DetermineFlightStatus(Flight flight)
+        {
+            if (!string.IsNullOrEmpty(flight.Status) && flight.Status == "CANCELLED")
+                return "CANCELLED";
+            var now = DateTime.Now;
+            if (now >= flight.ArrivalTime) return "COMPLETED";
+            if (now >= flight.DepartureTime) return "IN_FLIGHT";
+            return "SCHEDULED";
         }
     }
 }
