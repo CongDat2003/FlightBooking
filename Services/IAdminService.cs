@@ -31,5 +31,6 @@ namespace FlightBooking.Services
         Task<List<RevenueByMonthDto>> GetRevenueReportAsync(int year);
         Task<List<RevenueByMonthDto>> GetRevenueReportAsync(int startYear, int endYear);
         Task<List<PopularRouteDto>> GetPopularRoutesAsync(int topCount = 10);
+        Task<List<AirlineStatsDto>> GetAirlineStatsAsync();
     }
 }

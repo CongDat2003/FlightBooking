@@ -115,5 +115,19 @@ namespace FlightBooking.Controllers.Admin
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpGet("airline-stats")]
+        public async Task<ActionResult> GetAirlineStats()
+        {
+            try
+            {
+                var stats = await _adminService.GetAirlineStatsAsync();
+                return Ok(stats);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }

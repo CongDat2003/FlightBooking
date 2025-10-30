@@ -7,6 +7,9 @@
         public DateTime DepartureDate { get; set; }
         public int? Passengers { get; set; } = 1;
         public string? SeatClass { get; set; }
+        public int? AircraftTypeId { get; set; }
+        public TimeSpan? DepartureTimeFrom { get; set; }
+        public TimeSpan? DepartureTimeTo { get; set; }
     }
 
     public class FlightResponseDto

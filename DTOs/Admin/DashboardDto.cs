@@ -23,15 +23,23 @@
 
     public class PopularRouteDto
     {
-        public string Route { get; set; } = string.Empty;
+        public string Route { get; set; }
         public int BookingCount { get; set; }
         public decimal Revenue { get; set; }
     }
 
     public class BookingStatusStatsDto
     {
-        public string Status { get; set; } = string.Empty;
+        public string Status { get; set; }
         public int Count { get; set; }
         public decimal Percentage { get; set; }
+    }
+
+    public class AirlineStatsDto
+    {
+        public string AirlineName { get; set; }
+        public int TotalBookings { get; set; }
+        public int PaidBookings { get; set; }
+        public decimal Revenue { get; set; }
     }
 }

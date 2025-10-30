@@ -14,22 +14,22 @@ namespace FlightBooking.Services
     {
         private readonly FlightBookingContext _context;
         private readonly IOptions<VNPayConfig> _vnpayConfig;
-        private readonly IOptions<MoMoConfig> _momoConfig;
         private readonly IOptions<ZaloPayConfig> _zalopayConfig;
         private readonly ILogger<PaymentService> _logger;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public PaymentService(
             FlightBookingContext context,
             IOptions<VNPayConfig> vnpayConfig,
-            IOptions<MoMoConfig> momoConfig,
             IOptions<ZaloPayConfig> zalopayConfig,
-            ILogger<PaymentService> logger)
+            ILogger<PaymentService> logger,
+            IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _vnpayConfig = vnpayConfig;
-            _momoConfig = momoConfig;
             _zalopayConfig = zalopayConfig;
             _logger = logger;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public async Task<PaymentResponseDto> CreatePaymentAsync(CreatePaymentDto paymentDto)
@@ -86,6 +86,10 @@ namespace FlightBooking.Services
             if (callbackDto.Status == "SUCCESS")
             {
                 payment.Booking.PaymentStatus = "PAID";
+                if (payment.Booking.BookingStatus != "CONFIRMED")
+                {
+                    payment.Booking.BookingStatus = "CONFIRMED";
+                }
             }
             else if (callbackDto.Status == "FAILED")
             {
@@ -110,8 +114,6 @@ namespace FlightBooking.Services
             {
                 case "VNPAY":
                     return await GenerateVNPayUrlAsync(payment, paymentDto);
-                case "MOMO":
-                    return await GenerateMoMoUrlAsync(payment, paymentDto);
                 case "ZALOPAY":
                     return await GenerateZaloPayUrlAsync(payment, paymentDto);
                 default:
@@ -124,26 +126,103 @@ namespace FlightBooking.Services
             var booking = await _context.Bookings.FindAsync(payment.BookingId);
 
             var vnpay = new VnPayLibrary();
+            
+            // Thông tin cơ bản
             vnpay.AddRequestData("vnp_Version", "2.1.0");
             vnpay.AddRequestData("vnp_Command", "pay");
             vnpay.AddRequestData("vnp_TmnCode", config.TmnCode);
+            
+            // Số tiền (nhân 100 vì VNPay yêu cầu đơn vị là xu)
             vnpay.AddRequestData("vnp_Amount", ((long)(payment.Amount * 100)).ToString());
-            vnpay.AddRequestData("vnp_CreateDate", DateTime.Now.ToString("yyyyMMddHHmmss"));
+            
+            // Thời gian tạo giao dịch
+            var createDate = DateTime.Now;
+            vnpay.AddRequestData("vnp_CreateDate", createDate.ToString("yyyyMMddHHmmss"));
+            
+            // Thời gian hết hạn (15 phút sau)
+            var expireDate = createDate.AddMinutes(15);
+            vnpay.AddRequestData("vnp_ExpireDate", expireDate.ToString("yyyyMMddHHmmss"));
+            
+            // Thông tin tiền tệ và địa chỉ IP
             vnpay.AddRequestData("vnp_CurrCode", "VND");
-            vnpay.AddRequestData("vnp_IpAddr", "127.0.0.1");
+            vnpay.AddRequestData("vnp_IpAddr", GetClientIpAddress());
             vnpay.AddRequestData("vnp_Locale", "vn");
+            
+            // Thông tin đơn hàng
             vnpay.AddRequestData("vnp_OrderInfo", $"Thanh toan ve may bay - Ma booking: {booking?.BookingReference ?? payment.TransactionId}");
             vnpay.AddRequestData("vnp_OrderType", "other");
-
-            // SỬA: Ưu tiên ReturnUrl từ request, fallback về config
-            var returnUrl = !string.IsNullOrEmpty(paymentDto.ReturnUrl)
-                ? paymentDto.ReturnUrl
-                : config.ReturnUrl;
+            
+            // Tùy chọn kênh thanh toán sandbox: VNPAYQR | VNBANK | INTCARD
+            if (!string.IsNullOrWhiteSpace(paymentDto.BankCode))
+            {
+                vnpay.AddRequestData("vnp_BankCode", paymentDto.BankCode.Trim().ToUpperInvariant());
+            }
+            
+            // URL trả về: luôn dùng cấu hình HTTP/HTTPS để VNPay redirect (WebView sẽ chặn deep link)
+            var returnUrl = config.ReturnUrl;
             vnpay.AddRequestData("vnp_ReturnUrl", returnUrl);
-
+            
+            // Mã giao dịch
             vnpay.AddRequestData("vnp_TxnRef", payment.TransactionId);
 
-            return vnpay.CreateRequestUrl(config.Url, config.HashSecret);
+            _logger.LogInformation($"VNPay - Amount: {payment.Amount}, TxnRef: {payment.TransactionId}");
+            _logger.LogInformation($"VNPay - ReturnUrl: {returnUrl}");
+            _logger.LogInformation($"VNPay - IP: {GetClientIpAddress()}");
+
+            var paymentUrl = vnpay.CreateRequestUrl(config.Url, config.HashSecret);
+            
+            _logger.LogInformation($"VNPay - Generated URL: {paymentUrl}");
+            
+            return paymentUrl;
+        }
+
+        private string GetClientIpAddress()
+        {
+            try
+            {
+                // Lấy IP từ HttpContext thông qua IHttpContextAccessor
+                var httpContext = _httpContextAccessor.HttpContext;
+                if (httpContext?.Request != null)
+                {
+                    // Kiểm tra X-Forwarded-For header (khi có proxy/load balancer)
+                    if (httpContext.Request.Headers.TryGetValue("X-Forwarded-For", out var xForwardedFor))
+                    {
+                        var ip = xForwardedFor.ToString().Split(',')[0].Trim();
+                        if (!string.IsNullOrEmpty(ip) && ip != "unknown")
+                        {
+                            return ip;
+                        }
+                    }
+                    
+                    // Kiểm tra X-Real-IP header
+                    if (httpContext.Request.Headers.TryGetValue("X-Real-IP", out var xRealIp))
+                    {
+                        var ip = xRealIp.ToString();
+                        if (!string.IsNullOrEmpty(ip) && ip != "unknown")
+                        {
+                            return ip;
+                        }
+                    }
+                    
+                    // Lấy IP trực tiếp từ request
+                    var remoteIpAddress = httpContext.Connection.RemoteIpAddress;
+                    if (remoteIpAddress != null)
+                    {
+                        var ip = remoteIpAddress.ToString();
+                        if (ip != "::1" && ip != "127.0.0.1")
+                        {
+                            return ip;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Error getting client IP: {ex.Message}");
+            }
+            
+            // Fallback về IP mặc định (có thể thay bằng IP thật của server)
+            return "127.0.0.1";
         }
 
 
@@ -193,67 +272,6 @@ namespace FlightBooking.Services
             return momoResponse?.payUrl ?? "";
         }*/
 
-        private async Task<string> GenerateMoMoUrlAsync(Payment payment, CreatePaymentDto paymentDto)
-        {
-            var config = _momoConfig.Value;
-            var orderId = payment.TransactionId;
-            var requestId = payment.TransactionId;
-            var amount = ((long)payment.Amount).ToString(CultureInfo.InvariantCulture);
-            var orderInfo = $"Thanh toán vé máy bay - {payment.TransactionId}";
-            var redirectUrl = paymentDto.ReturnUrl ?? config.ReturnUrl;
-            var ipnUrl = config.IpnUrl;
-            var requestType = config.RequestType;
-            var extraData = "";
-
-            // Tạo raw signature theo thứ tự alphabet
-            var rawSignature = $"accessKey={config.AccessKey}&amount={amount}&extraData={extraData}&ipnUrl={ipnUrl}&orderId={orderId}&orderInfo={orderInfo}&partnerCode={config.PartnerCode}&redirectUrl={redirectUrl}&requestId={requestId}&requestType={requestType}";
-
-            var signature = ComputeHmacSha256(rawSignature, config.SecretKey);
-
-            var requestData = new
-            {
-                partnerCode = config.PartnerCode,
-                partnerName = "Flight Booking",
-                storeId = "FlightBookingStore",
-                requestId = requestId,
-                amount = (long)payment.Amount,
-                orderId = orderId,
-                orderInfo = orderInfo,
-                redirectUrl = redirectUrl,
-                ipnUrl = ipnUrl,
-                lang = "vi",
-                extraData = extraData,
-                requestType = requestType,
-                signature = signature
-            };
-
-            using var httpClient = new HttpClient();
-            var json = System.Text.Json.JsonSerializer.Serialize(requestData, new JsonSerializerOptions
-            {
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            });
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            _logger.LogInformation($"MoMo request: {json}");
-
-            var response = await httpClient.PostAsync(config.Endpoint, content);
-            var responseContent = await response.Content.ReadAsStringAsync();
-
-            _logger.LogInformation($"MoMo response: {responseContent}");
-
-            var momoResponse = System.Text.Json.JsonSerializer.Deserialize<MoMoResponse>(responseContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-            // SỬA: So sánh với int thay vì string
-            if (momoResponse?.resultCode == 0)
-            {
-                return momoResponse.payUrl;
-            }
-
-            throw new Exception($"MoMo error: {momoResponse?.message} (Code: {momoResponse?.resultCode})");
-        }
 
 
         /*       private async Task<string> GenerateZaloPayUrlAsync(Payment payment, CreatePaymentDto paymentDto)

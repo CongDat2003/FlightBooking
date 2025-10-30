@@ -31,6 +31,25 @@ namespace FlightBooking.Services
                          && f.DepartureTime.Date == searchDto.DepartureDate.Date
                          && f.Status == "SCHEDULED");
 
+            // Filter by aircraft type
+            if (searchDto.AircraftTypeId.HasValue)
+            {
+                query = query.Where(f => f.AircraftTypeId == searchDto.AircraftTypeId.Value);
+            }
+
+            // Filter by departure time range (hour:minute in the day)
+            if (searchDto.DepartureTimeFrom.HasValue)
+            {
+                var fromTime = searchDto.DepartureTimeFrom.Value;
+                query = query.Where(f => f.DepartureTime.TimeOfDay >= fromTime);
+            }
+            if (searchDto.DepartureTimeTo.HasValue)
+            {
+                var toTime = searchDto.DepartureTimeTo.Value;
+                query = query.Where(f => f.DepartureTime.TimeOfDay <= toTime);
+            }
+
+            // Filter by seat class
             if (!string.IsNullOrEmpty(searchDto.SeatClass))
             {
                 query = query.Where(f => f.Seats.Any(s => s.Class.ClassName == searchDto.SeatClass && s.IsAvailable == true));
@@ -361,8 +380,20 @@ namespace FlightBooking.Services
             if (payment == null)
                 throw new ArgumentException("Payment not found");
 
-            payment.Status = "COMPLETED";
+            // Update payment status
+            payment.Status = "SUCCESS";
             await _context.SaveChangesAsync();
+
+            // Sync booking payment status
+            if (payment.Booking != null)
+            {
+                payment.Booking.PaymentStatus = "PAID";
+                if (payment.Booking.BookingStatus != "CONFIRMED")
+                {
+                    payment.Booking.BookingStatus = "CONFIRMED";
+                }
+                await _context.SaveChangesAsync();
+            }
 
             await _notificationService.SendPaymentConfirmationAsync(paymentId);
             return true;

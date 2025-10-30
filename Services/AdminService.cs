@@ -637,10 +637,30 @@ namespace FlightBooking.Services
                 .Take(topCount)
                 .ToListAsync();
         }
+
+        public async Task<List<AirlineStatsDto>> GetAirlineStatsAsync()
+        {
+            return await _context.Bookings
+                .Include(b => b.Flight)
+                    .ThenInclude(f => f.Airline)
+                .GroupBy(b => b.Flight.Airline.AirlineName)
+                .Select(g => new AirlineStatsDto
+                {
+                    AirlineName = g.Key,
+                    TotalBookings = g.Count(),
+                    PaidBookings = g.Count(b => b.PaymentStatus == "PAID"),
+                    Revenue = g.Where(b => b.PaymentStatus == "PAID").Sum(b => b.TotalAmount)
+                })
+                .OrderByDescending(a => a.PaidBookings)
+                .ToListAsync();
+        }
+
         private static string DetermineFlightStatus(Flight flight)
         {
             if (!string.IsNullOrEmpty(flight.Status) && flight.Status == "CANCELLED")
                 return "CANCELLED";
+            if (!string.IsNullOrEmpty(flight.Status) && flight.Status == "DELAYED")
+                return "DELAYED";
             var now = DateTime.Now;
             if (now >= flight.ArrivalTime) return "COMPLETED";
             if (now >= flight.DepartureTime) return "IN_FLIGHT";

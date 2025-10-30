@@ -32,40 +32,27 @@ namespace FlightBooking.Helpers
 
         public string CreateRequestUrl(string baseUrl, string vnpHashSecret)
         {
-            var data = new StringBuilder();
-
-            // Sắp xếp theo thứ tự alphabet của key (quan trọng!)
+            // Build percent-encoded query (RFC 3986 style via WebUtility.UrlEncode) and sign it
+            var dataBuilder = new StringBuilder();
             foreach (var kv in _requestData.OrderBy(x => x.Key))
             {
                 if (!string.IsNullOrEmpty(kv.Value))
                 {
-                    data.Append(kv.Key + "=" + kv.Value + "&");
+                    dataBuilder.Append(WebUtility.UrlEncode(kv.Key))
+                               .Append("=")
+                               .Append(WebUtility.UrlEncode(kv.Value))
+                               .Append("&");
                 }
             }
 
-            // Tạo query string cho URL
-            var queryString = data.ToString();
-            if (queryString.Length > 0)
+            var encodedQuery = dataBuilder.ToString();
+            if (encodedQuery.Length > 0)
             {
-                queryString = queryString.Remove(queryString.Length - 1, 1); // Remove last &
+                encodedQuery = encodedQuery.Remove(encodedQuery.Length - 1, 1);
             }
 
-            // Tạo chữ ký từ raw data (không encode URL)
-            var signData = queryString;
-            var vnpSecureHash = HmacSHA512(vnpHashSecret, signData);
-
-            // Tạo URL cuối cùng với encoding
-            var finalUrl = baseUrl + "?";
-            foreach (var kv in _requestData.OrderBy(x => x.Key))
-            {
-                if (!string.IsNullOrEmpty(kv.Value))
-                {
-                    finalUrl += WebUtility.UrlEncode(kv.Key) + "=" + WebUtility.UrlEncode(kv.Value) + "&";
-                }
-            }
-
-            finalUrl += "vnp_SecureHash=" + vnpSecureHash;
-
+            var vnpSecureHash = HmacSHA512(vnpHashSecret, encodedQuery);
+            var finalUrl = baseUrl + "?" + encodedQuery + "&vnp_SecureHash=" + vnpSecureHash + "&vnp_SecureHashType=HmacSHA512";
             return finalUrl;
         }
 
@@ -110,8 +97,6 @@ namespace FlightBooking.Helpers
         private string GetResponseData()
         {
             var data = new StringBuilder();
-
-            // Sắp xếp theo alphabet và loại bỏ vnp_SecureHash, vnp_SecureHashType
             var sortedData = _responseData
                 .Where(kv => !kv.Key.Equals("vnp_SecureHash", StringComparison.InvariantCultureIgnoreCase)
                           && !kv.Key.Equals("vnp_SecureHashType", StringComparison.InvariantCultureIgnoreCase)
@@ -120,12 +105,15 @@ namespace FlightBooking.Helpers
 
             foreach (var kv in sortedData)
             {
-                data.Append(kv.Key + "=" + kv.Value + "&");
+                data.Append(WebUtility.UrlEncode(kv.Key))
+                    .Append("=")
+                    .Append(WebUtility.UrlEncode(kv.Value))
+                    .Append("&");
             }
 
             if (data.Length > 0)
             {
-                data.Remove(data.Length - 1, 1); // Remove last &
+                data.Remove(data.Length - 1, 1);
             }
 
             return data.ToString();
