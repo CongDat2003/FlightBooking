@@ -35,6 +35,9 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ISMSService, SMSService>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 
+// Add HttpContextAccessor for accessing HttpContext in services
+builder.Services.AddHttpContextAccessor();
+
 // Add configuration for payment gateways
 builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
 builder.Services.Configure<MoMoConfig>(builder.Configuration.GetSection("MoMo"));

@@ -12,12 +12,23 @@
 
     public class PaymentResponseDto
     {
+        public int BookingId { get; set; }
         public int PaymentId { get; set; }
         public string TransactionId { get; set; }
+        public string PaymentMethod { get; set; }
         public string PaymentUrl { get; set; }
         public string Status { get; set; }
         public decimal Amount { get; set; }
         public DateTime CreatedAt { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class UpdatePaymentDto
+    {
+        public string? PaymentMethod { get; set; }
+        public decimal? Amount { get; set; }
+        public string? Status { get; set; } // PENDING, SUCCESS, FAILED, REFUNDED
+        public string? Notes { get; set; }
     }
 
     public class PaymentCallbackDto

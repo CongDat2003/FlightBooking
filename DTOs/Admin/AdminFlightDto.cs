@@ -21,6 +21,7 @@
         public decimal? BasePrice { get; set; }
         public string? Status { get; set; }
         public string? Gate { get; set; }
+        public string? AdminMessage { get; set; }
     }
 
     public class AdminFlightResponseDto

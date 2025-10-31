@@ -109,5 +109,47 @@ namespace FlightBooking.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpDelete("{paymentId}")]
+        public async Task<ActionResult> DeletePayment(int paymentId)
+        {
+            try
+            {
+                var result = await _paymentService.DeletePaymentAsync(paymentId);
+                if (result)
+                    return NoContent();
+                return NotFound(new { message = "Payment not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("{paymentId}")]
+        public async Task<ActionResult<PaymentResponseDto>> UpdatePayment(int paymentId, [FromBody] UpdatePaymentDto dto)
+        {
+            try
+            {
+                var updated = await _paymentService.UpdatePaymentAsync(paymentId, dto);
+                return Ok(updated);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }

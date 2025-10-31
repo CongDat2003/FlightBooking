@@ -118,5 +118,25 @@ namespace FlightBooking.Controllers
                 return StatusCode(500, new { message = "An error occurred while cancelling booking.", detail = ex.Message });
             }
         }
+
+        [HttpPost("{bookingId}/restore-request")]
+        public async Task<ActionResult> RequestRestore(int bookingId, [FromBody] string? note = null)
+        {
+            try
+            {
+                var result = await _flightService.RequestRestoreAsync(bookingId, note);
+                if (!result)
+                    return NotFound(new { message = "Booking not found" });
+                return Ok(new { message = "Restore request submitted" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while submitting restore request.", detail = ex.Message });
+            }
+        }
     }
 }

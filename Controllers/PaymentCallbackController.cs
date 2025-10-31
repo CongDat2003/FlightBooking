@@ -1,4 +1,4 @@
-﻿using FlightBooking.Configuration;
+using FlightBooking.Configuration;
 using FlightBooking.DTOs;
 using FlightBooking.Helpers;
 using FlightBooking.Services;

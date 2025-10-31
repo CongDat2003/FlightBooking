@@ -80,5 +80,65 @@ namespace FlightBooking.Controllers.Admin
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpDelete("{bookingId}")]
+        public async Task<ActionResult> DeleteBooking(int bookingId)
+        {
+            try
+            {
+                var result = await _adminService.DeleteBookingPermanentlyAsync(bookingId);
+                if (result)
+                    return NoContent();
+                return NotFound(new { message = "Booking not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{bookingId}/restore-approve")]
+        public async Task<ActionResult> ApproveRestore(int bookingId, [FromBody] string? note = null)
+        {
+            try
+            {
+                var result = await _adminService.ApproveRestoreAsync(bookingId, note);
+                if (result)
+                    return Ok(new { message = "Restore approved" });
+                return NotFound(new { message = "Booking not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{bookingId}/restore-reject")]
+        public async Task<ActionResult> RejectRestore(int bookingId, [FromBody] string? note = null)
+        {
+            try
+            {
+                var result = await _adminService.RejectRestoreAsync(bookingId, note);
+                if (result)
+                    return Ok(new { message = "Restore rejected" });
+                return NotFound(new { message = "Booking not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }
