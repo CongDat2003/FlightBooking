@@ -36,6 +36,7 @@ public partial class FlightBookingContext : DbContext
     public DbSet<Payment> Payments { get; set; }
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+    public DbSet<Message> Messages { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
@@ -387,6 +388,12 @@ public partial class FlightBookingContext : DbContext
 
         modelBuilder.Entity<Notification>()
             .HasIndex(n => n.CreatedAt);
+
+        // Message configurations
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => new { m.UserId, m.CreatedAt });
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => m.SenderType);
 
         OnModelCreatingPartial(modelBuilder);
     }

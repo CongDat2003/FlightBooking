@@ -1,4 +1,5 @@
 ﻿using FlightBooking.DTOs.Admin;
+using FlightBooking.DTOs.User;
 using FlightBooking.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -40,6 +41,24 @@ namespace FlightBooking.Controllers.Admin
             catch (ArgumentException ex)
             {
                 return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<AdminUserResponseDto>> CreateUser([FromBody] RegisterUserDto registerDto)
+        {
+            try
+            {
+                var user = await _adminService.CreateUserAsync(registerDto);
+                return CreatedAtAction(nameof(GetUserById), new { userId = user.UserId }, user);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
             catch (Exception ex)
             {

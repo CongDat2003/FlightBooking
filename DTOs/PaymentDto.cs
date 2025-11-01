@@ -1,11 +1,20 @@
-﻿namespace FlightBooking.DTOs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace FlightBooking.DTOs
 {
     public class CreatePaymentDto
     {
+        [Required]
         public int BookingId { get; set; }
+        
+        [Required]
         public string PaymentMethod { get; set; }
-        public string ReturnUrl { get; set; }
-        public string CancelUrl { get; set; }
+        
+        // ReturnUrl và CancelUrl là optional - backend sẽ tự động detect hoặc dùng config nếu null/empty
+        // Nếu không set, backend sẽ dùng ReturnUrl từ config hoặc detect từ HttpContext
+        public string? ReturnUrl { get; set; }
+        public string? CancelUrl { get; set; }
+        
         // Optional: VNPay channel selector (sandbox demo): VNPAYQR | VNBANK | INTCARD
         public string? BankCode { get; set; }
     }

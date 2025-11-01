@@ -1,4 +1,5 @@
 ﻿using FlightBooking.DTOs.Admin;
+using FlightBooking.DTOs.User;
 using FlightBooking.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,10 +8,12 @@ namespace FlightBooking.Services
     public class AdminService : IAdminService
     {
         private readonly FlightBookingContext _context;
+        private readonly INotificationService _notificationService;
 
-        public AdminService(FlightBookingContext context)
+        public AdminService(FlightBookingContext context, INotificationService notificationService)
         {
             _context = context;
+            _notificationService = notificationService;
         }
 
         public async Task<DashboardStatsDto> GetDashboardStatsAsync()
@@ -23,29 +26,29 @@ namespace FlightBooking.Services
                 TotalFlights = await _context.Flights.CountAsync(),
                 TotalBookings = await _context.Bookings.CountAsync(),
                 TotalUsers = await _context.Users.CountAsync(),
-                TotalRevenue = await _context.Bookings
-                    .Where(b => b.PaymentStatus == "PAID")
-                    .SumAsync(b => b.TotalAmount),
+                TotalRevenue = await _context.Payments
+                    .Where(p => p.Status == "SUCCESS")
+                    .SumAsync(p => p.Amount),
                 TodayBookings = await _context.Bookings
                     .Where(b => b.BookingDate.HasValue && b.BookingDate.Value.Date == today)
                     .CountAsync(),
-                TodayRevenue = await _context.Bookings
-                    .Where(b => b.BookingDate.HasValue && b.BookingDate.Value.Date == today && b.PaymentStatus == "PAID")
-                    .SumAsync(b => b.TotalAmount)
+                TodayRevenue = await _context.Payments
+                    .Where(p => p.Status == "SUCCESS" && p.CreatedAt.Date == today)
+                    .SumAsync(p => p.Amount)
             };
 
             // Monthly revenue for last 12 months
-            stats.MonthlyRevenue = await _context.Bookings
-                .Where(b => b.PaymentStatus == "PAID" && b.BookingDate >= currentMonth.AddMonths(-11))
-                .GroupBy(b => new {
-                    Year = b.BookingDate.Value.Year,
-                    Month = b.BookingDate.Value.Month
+            stats.MonthlyRevenue = await _context.Payments
+                .Where(p => p.Status == "SUCCESS" && p.CreatedAt >= currentMonth.AddMonths(-11))
+                .GroupBy(p => new {
+                    Year = p.CreatedAt.Year,
+                    Month = p.CreatedAt.Month
                 })
                 .Select(g => new RevenueByMonthDto
                 {
                     Year = g.Key.Year,
                     Month = g.Key.Month,
-                    Revenue = g.Sum(b => b.TotalAmount),
+                    Revenue = g.Sum(p => p.Amount),
                     BookingCount = g.Count()
                 })
                 .OrderBy(r => r.Year).ThenBy(r => r.Month)
@@ -311,6 +314,15 @@ namespace FlightBooking.Services
             }*/
 
             await _context.SaveChangesAsync();
+
+            // If admin set to DELAYED, notify all confirmed bookings
+            if (!string.IsNullOrEmpty(flightDto.Status) && flightDto.Status == "DELAYED")
+            {
+                var message = !string.IsNullOrWhiteSpace(flightDto.AdminMessage)
+                    ? flightDto.AdminMessage
+                    : $"Flight {flight.FlightNumber} is delayed. Please check updates.";
+                await _notificationService.SendFlightUpdateAsync(flightId, "DELAYED", message);
+            }
             return await GetFlightByIdAsync(flightId);
         }
 
@@ -328,9 +340,9 @@ namespace FlightBooking.Services
 
                 if (flight == null) return false;
 
-                // Kiểm tra có booking confirmed không
-                if (flight.Bookings.Any(b => b.BookingStatus == "CONFIRMED"))
-                    throw new InvalidOperationException("Cannot delete flight with confirmed bookings");
+                // Không cho phép xóa flight nếu còn bất kỳ booking nào liên kết (tránh lỗi FK/cascade)
+                if (flight.Bookings.Any())
+                    throw new InvalidOperationException("Cannot delete flight with existing bookings");
 
                 // Kiểm tra có ghế đã được đặt không
                 if (flight.Seats.Any(s => s.BookingSeats.Any()))
@@ -414,6 +426,52 @@ namespace FlightBooking.Services
             return await GetBookingByIdAsync(bookingId);
         }
 
+        public async Task<bool> ApproveRestoreAsync(int bookingId, string? note = null)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.Flight)
+                .Include(b => b.BookingSeats)
+                    .ThenInclude(bs => bs.Seat)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+            if (booking == null) return false;
+            if (booking.BookingStatus != "RESTORE_PENDING")
+                throw new InvalidOperationException("Booking is not pending restore");
+
+            // All seats must still be available
+            if (booking.BookingSeats.Any(bs => bs.Seat.IsAvailable == false))
+                throw new InvalidOperationException("One or more seats are no longer available");
+
+            foreach (var bs in booking.BookingSeats)
+            {
+                bs.Seat.IsAvailable = false;
+            }
+            booking.BookingStatus = "CONFIRMED";
+            booking.Notes = string.IsNullOrWhiteSpace(note) ? booking.Notes : note;
+            await _context.SaveChangesAsync();
+
+            await _notificationService.SendFlightUpdateAsync(booking.FlightId, "RESTORE_APPROVED", $"Yêu cầu khôi phục vé {booking.BookingReference} đã được chấp nhận.");
+            return true;
+        }
+
+        public async Task<bool> RejectRestoreAsync(int bookingId, string? note = null)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.Flight)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+            if (booking == null) return false;
+            if (booking.BookingStatus != "RESTORE_PENDING")
+                throw new InvalidOperationException("Booking is not pending restore");
+
+            booking.BookingStatus = "CANCELLED";
+            booking.Notes = string.IsNullOrWhiteSpace(note) ? booking.Notes : note;
+            await _context.SaveChangesAsync();
+
+            await _notificationService.SendFlightUpdateAsync(booking.FlightId, "RESTORE_REJECTED", $"Yêu cầu khôi phục vé {booking.BookingReference} đã bị từ chối.");
+            return true;
+        }
+
         public async Task<AdminBookingResponseDto> GetBookingByIdAsync(int bookingId)
         {
             var booking = await _context.Bookings
@@ -478,6 +536,58 @@ namespace FlightBooking.Services
             return true;
         }
 
+        public async Task<bool> DeleteBookingPermanentlyAsync(int bookingId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var booking = await _context.Bookings
+                    .Include(b => b.BookingSeats)
+                    .Include(b => b.User)
+                    .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+                if (booking == null) return false;
+                if (booking.BookingStatus != "CANCELLED")
+                    throw new InvalidOperationException("Only cancelled bookings can be deleted");
+
+                // Remove or detach related notifications
+                var notifications = await _context.Notifications
+                    .Where(n => n.RelatedBookingId == bookingId)
+                    .ToListAsync();
+                foreach (var n in notifications)
+                {
+                    n.RelatedBookingId = null; // detach FK to allow deletion
+                }
+
+                // Remove related payments
+                var payments = await _context.Payments.Where(p => p.BookingId == bookingId).ToListAsync();
+                if (payments.Any())
+                {
+                    _context.Payments.RemoveRange(payments);
+                }
+
+                // Release seats and remove BookingSeats
+                foreach (var bs in booking.BookingSeats)
+                {
+                    var seat = await _context.Seats.FirstOrDefaultAsync(s => s.FlightId == booking.FlightId && s.SeatId == bs.SeatId);
+                    if (seat != null) seat.IsAvailable = true;
+                }
+                _context.BookingSeats.RemoveRange(booking.BookingSeats);
+
+                // Remove booking
+                _context.Bookings.Remove(booking);
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
         public async Task<List<AdminUserResponseDto>> GetAllUsersAsync(int page = 1, int pageSize = 10)
         {
             var users = await _context.Users
@@ -531,6 +641,36 @@ namespace FlightBooking.Services
             };
         }
 
+        public async Task<AdminUserResponseDto> CreateUserAsync(RegisterUserDto registerDto)
+        {
+            // Check if username or email already exists
+            var existingUser = await _context.Users
+                .FirstOrDefaultAsync(u => u.Username == registerDto.Username || u.Email == registerDto.Email);
+
+            if (existingUser != null)
+                throw new InvalidOperationException("Username or email already exists");
+
+            var user = new User
+            {
+                Username = registerDto.Username,
+                Email = registerDto.Email,
+                Password = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
+                FullName = registerDto.FullName,
+                Phone = registerDto.Phone,
+                DateOfBirth = registerDto.DateOfBirth,
+                Gender = registerDto.Gender,
+                Role = "Customer",
+                IsActive = true,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            return await GetUserByIdAsync(user.UserId);
+        }
+
         public async Task<AdminUserResponseDto> UpdateUserStatusAsync(int userId, UpdateUserStatusDto statusDto)
         {
             var user = await _context.Users.FindAsync(userId);
@@ -580,16 +720,15 @@ namespace FlightBooking.Services
 
         public async Task<List<RevenueByMonthDto>> GetRevenueReportAsync(int year)
         {
-            return await _context.Bookings
-                .Where(b => b.PaymentStatus == "PAID" &&
-                           b.BookingDate.HasValue &&
-                           b.BookingDate.Value.Year == year)
-                .GroupBy(b => b.BookingDate.Value.Month)
+            return await _context.Payments
+                .Where(p => p.Status == "SUCCESS" &&
+                           p.CreatedAt.Year == year)
+                .GroupBy(p => p.CreatedAt.Month)
                 .Select(g => new RevenueByMonthDto
                 {
                     Year = year,
                     Month = g.Key,
-                    Revenue = g.Sum(b => b.TotalAmount),
+                    Revenue = g.Sum(p => p.Amount),
                     BookingCount = g.Count()
                 })
                 .OrderBy(r => r.Month)
@@ -598,17 +737,16 @@ namespace FlightBooking.Services
 
         public async Task<List<RevenueByMonthDto>> GetRevenueReportAsync(int startYear, int endYear)
         {
-            return await _context.Bookings
-                .Where(b => b.PaymentStatus == "PAID" &&
-                           b.BookingDate.HasValue &&
-                           b.BookingDate.Value.Year >= startYear &&
-                           b.BookingDate.Value.Year <= endYear)
-                .GroupBy(b => new { b.BookingDate.Value.Year, b.BookingDate.Value.Month })
+            return await _context.Payments
+                .Where(p => p.Status == "SUCCESS" &&
+                           p.CreatedAt.Year >= startYear &&
+                           p.CreatedAt.Year <= endYear)
+                .GroupBy(p => new { Year = p.CreatedAt.Year, Month = p.CreatedAt.Month })
                 .Select(g => new RevenueByMonthDto
                 {
                     Year = g.Key.Year,
                     Month = g.Key.Month,
-                    Revenue = g.Sum(b => b.TotalAmount),
+                    Revenue = g.Sum(p => p.Amount),
                     BookingCount = g.Count()
                 })
                 .OrderBy(r => r.Year).ThenBy(r => r.Month)
@@ -663,7 +801,6 @@ namespace FlightBooking.Services
                 return "DELAYED";
             var now = DateTime.Now;
             if (now >= flight.ArrivalTime) return "COMPLETED";
-            if (now >= flight.DepartureTime) return "IN_FLIGHT";
             return "SCHEDULED";
         }
     }
