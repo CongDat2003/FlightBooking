@@ -13,5 +13,6 @@ namespace FlightBooking.Services
         Task<bool> UpdateBookingStatusAsync(int bookingId, string status);
         Task<bool> CancelBookingAsync(int bookingId);
         Task<bool> ConfirmPaymentAsync(int paymentId);
+        Task<bool> RequestRestoreAsync(int bookingId, string? note = null);
     }
 }

@@ -18,51 +18,82 @@ namespace FlightBooking.Services
 
         public async Task<MessageResponseDto> SendMessageAsync(CreateMessageDto messageDto)
         {
-            var message = new Message
+            _logger.LogInformation($"=== SendMessageAsync START ===");
+            _logger.LogInformation($"UserId: {messageDto.UserId}, Content length: {messageDto.Content?.Length ?? 0}, SenderType: {messageDto.SenderType}");
+            
+            try
             {
-                UserId = messageDto.UserId,
-                Content = messageDto.Content,
-                SenderType = messageDto.SenderType,
-                Status = "SENT",
-                CreatedAt = DateTime.Now
-            };
-
-            _context.Messages.Add(message);
-            await _context.SaveChangesAsync();
-
-            // Nếu user gửi tin nhắn và chưa có admin trả lời trong 30 giây, tự động gửi auto-reply
-            if (messageDto.SenderType == "USER" && messageDto.UserId.HasValue)
-            {
-                _ = Task.Run(async () =>
+                if (string.IsNullOrWhiteSpace(messageDto.Content))
                 {
-                    await Task.Delay(30000); // Đợi 30 giây
-                    var hasAdminReply = await _context.Messages
-                        .AnyAsync(m => m.UserId == messageDto.UserId 
-                            && m.SenderType == "ADMIN" 
-                            && m.CreatedAt > message.CreatedAt);
-                    
-                    if (!hasAdminReply)
-                    {
-                        var autoReply = new Message
-                        {
-                            UserId = messageDto.UserId,
-                            Content = "Xin chào! Cảm ơn bạn đã liên hệ. Chúng tôi đã nhận được tin nhắn của bạn và sẽ phản hồi sớm nhất có thể. Vui lòng đợi một chút nhé!",
-                            SenderType = "SYSTEM",
-                            Status = "SENT",
-                            IsAutoReply = true,
-                            CreatedAt = DateTime.Now
-                        };
-                        _context.Messages.Add(autoReply);
-                        await _context.SaveChangesAsync();
-                    }
-                });
-            }
+                    _logger.LogError("Message content is empty");
+                    throw new ArgumentException("Nội dung tin nhắn không được để trống");
+                }
+                
+                var message = new Message
+                {
+                    UserId = messageDto.UserId,
+                    Content = messageDto.Content?.Trim() ?? string.Empty,
+                    SenderType = string.IsNullOrWhiteSpace(messageDto.SenderType) ? "USER" : messageDto.SenderType.ToUpper(),
+                    Status = "SENT",
+                    CreatedAt = DateTime.Now
+                };
 
-            return await GetMessageDtoAsync(message);
+                _context.Messages.Add(message);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation($"Message saved: MessageId={message.MessageId}, UserId={message.UserId}");
+
+                // Nếu user gửi tin nhắn và chưa có admin trả lời trong 30 giây, tự động gửi auto-reply
+                // Note: Auto-reply được tắt tạm thời để tránh lỗi - có thể bật lại sau khi test
+                // if (message.SenderType == "USER" && messageDto.UserId.HasValue)
+                // {
+                //     _ = Task.Run(async () =>
+                //     {
+                //         try
+                //         {
+                //             await Task.Delay(30000); // Đợi 30 giây
+                //             // Check if admin replied
+                //             var hasAdminReply = await _context.Messages
+                //                 .AnyAsync(m => m.UserId == messageDto.UserId 
+                //                     && m.SenderType == "ADMIN" 
+                //                     && m.CreatedAt > message.CreatedAt);
+                //             
+                //             if (!hasAdminReply)
+                //             {
+                //                 var autoReply = new Message
+                //                 {
+                //                     UserId = messageDto.UserId,
+                //                     Content = "Xin chào! Cảm ơn bạn đã liên hệ. Chúng tôi đã nhận được tin nhắn của bạn và sẽ phản hồi sớm nhất có thể. Vui lòng đợi một chút nhé!",
+                //                     SenderType = "SYSTEM",
+                //                     Status = "SENT",
+                //                     IsAutoReply = true,
+                //                     CreatedAt = DateTime.Now
+                //                 };
+                //                 _context.Messages.Add(autoReply);
+                //                 await _context.SaveChangesAsync();
+                //                 _logger.LogInformation("Auto-reply sent to userId: {UserId}", messageDto.UserId);
+                //             }
+                //         }
+                //         catch (Exception ex)
+                //         {
+                //             _logger.LogError(ex, "Error sending auto-reply");
+                //         }
+                //     });
+                // }
+
+                var result = await GetMessageDtoAsync(message);
+                _logger.LogInformation($"=== SendMessageAsync SUCCESS - MessageId={message.MessageId} ===");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"=== SendMessageAsync FAILED ===");
+                throw;
+            }
         }
 
         public async Task<ChatConversationDto> GetConversationAsync(int? userId = null)
         {
+            _logger.LogInformation($"=== GetConversationAsync START - userId: {userId} ===");
             try
             {
                 var query = _context.Messages
@@ -85,8 +116,7 @@ namespace FlightBooking.Services
                 }
 
                 var messages = await query.ToListAsync();
-                
-                _logger.LogInformation("Found {Count} messages for userId: {UserId}", messages.Count, userId);
+                _logger.LogInformation("Found {Count} messages for userId: {UserId}", messages.Count, userId ?? 0);
 
                 // Unread count: với user thì đếm tin nhắn từ ADMIN/SYSTEM chưa đọc
                 // Với admin thì đếm tin nhắn từ USER chưa đọc
@@ -100,7 +130,7 @@ namespace FlightBooking.Services
                     unreadCount = messages.Count(m => m.Status == "SENT" && m.SenderType == "USER");
                 }
 
-                return new ChatConversationDto
+                var conversationDto = new ChatConversationDto
                 {
                     Messages = messages.Select(m => new MessageResponseDto
                     {
@@ -117,10 +147,13 @@ namespace FlightBooking.Services
                     UnreadCount = unreadCount,
                     LastMessageTime = messages.LastOrDefault()?.CreatedAt
                 };
+                
+                _logger.LogInformation($"=== GetConversationAsync SUCCESS - Messages: {conversationDto.Messages.Count}, Unread: {unreadCount} ===");
+                return conversationDto;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetConversationAsync for userId: {UserId}", userId);
+                _logger.LogError(ex, $"=== GetConversationAsync FAILED - userId: {userId} ===");
                 throw;
             }
         }

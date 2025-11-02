@@ -28,8 +28,8 @@ namespace FlightBooking.Services
                 .Include(f => f.Seats)
                 .Where(f => f.DepartureAirport.AirportCode == searchDto.DepartureAirportCode
                          && f.ArrivalAirport.AirportCode == searchDto.ArrivalAirportCode
-                         && f.DepartureTime.Date == searchDto.DepartureDate.Date
-                         && f.Status == "SCHEDULED");
+                         && f.DepartureTime.Date == searchDto.DepartureDate.Date);
+                // Removed status filter to return all flights for categorization in UI
 
             // Filter by aircraft type
             if (searchDto.AircraftTypeId.HasValue)
@@ -135,6 +135,14 @@ namespace FlightBooking.Services
                 if (flight == null)
                     throw new ArgumentException("Flight not found");
 
+                // Validate flight status - cannot book DELAYED, COMPLETED, CANCELLED, PREPARING, DEPARTED flights
+                if (flight.Status == "DELAYED" || flight.Status == "COMPLETED" || 
+                    flight.Status == "CANCELLED" || flight.Status == "PREPARING" || 
+                    flight.Status == "DEPARTED")
+                {
+                    throw new InvalidOperationException($"Cannot book flight with status: {flight.Status}. Please select a scheduled flight.");
+                }
+
                 // Validate seat class
                 var seatClass = await _context.SeatClasses
                     .FirstOrDefaultAsync(sc => sc.ClassId == bookingDto.SeatClassId);
@@ -165,7 +173,9 @@ namespace FlightBooking.Services
                     UserId = bookingDto.UserId,
                     FlightId = bookingDto.FlightId,
                     TotalAmount = totalAmount,
-                    Notes = bookingDto.Notes
+                    Notes = bookingDto.Notes,
+                    BookingStatus = "PENDING", // PENDING cho đến khi thanh toán thành công
+                    PaymentStatus = "PENDING"
                 };
 
                 _context.Bookings.Add(booking);
@@ -194,8 +204,8 @@ namespace FlightBooking.Services
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                // Send notification
-                await _notificationService.SendBookingConfirmationAsync(booking.BookingId);
+                // KHÔNG gửi email khi tạo booking - chỉ gửi khi thanh toán thành công
+                // Email confirmation sẽ được gửi trong PaymentService khi payment success
 
                 // Return booking details
                 return await GetBookingByIdAsync(booking.BookingId);
@@ -396,6 +406,30 @@ namespace FlightBooking.Services
             }
 
             await _notificationService.SendPaymentConfirmationAsync(paymentId);
+            return true;
+        }
+
+        public async Task<bool> RequestRestoreAsync(int bookingId, string? note = null)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.Flight)
+                .Include(b => b.BookingSeats)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+            if (booking == null) throw new ArgumentException("Booking not found");
+            if (booking.BookingStatus != "CANCELLED") throw new InvalidOperationException("Only cancelled bookings can request restore");
+            if (booking.Flight == null) throw new ArgumentException("Flight not found for booking");
+
+            var now = DateTime.Now;
+            if (booking.Flight.DepartureTime <= now.AddDays(2))
+                throw new InvalidOperationException("Restore request must be at least 2 days before departure");
+
+            booking.BookingStatus = "RESTORE_PENDING";
+            booking.Notes = string.IsNullOrWhiteSpace(note) ? booking.Notes : note;
+            await _context.SaveChangesAsync();
+
+            // Notify user: request submitted
+            await _notificationService.SendFlightUpdateAsync(booking.FlightId, "RESTORE_PENDING", $"Yêu cầu khôi phục vé {booking.BookingReference} đã được gửi. Vui lòng chờ duyệt.");
             return true;
         }
     }

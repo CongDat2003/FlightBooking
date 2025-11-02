@@ -1,4 +1,5 @@
 ﻿using FlightBooking.DTOs.Admin;
+using FlightBooking.DTOs.User;
 
 namespace FlightBooking.Services
 {
@@ -20,10 +21,14 @@ namespace FlightBooking.Services
         Task<AdminBookingResponseDto> GetBookingByIdAsync(int bookingId);
         Task<AdminBookingResponseDto> UpdateBookingStatusAsync(int bookingId, UpdateBookingStatusDto statusDto);
         Task<bool> CancelBookingAsync(int bookingId);
+        Task<bool> DeleteBookingPermanentlyAsync(int bookingId);
+        Task<bool> ApproveRestoreAsync(int bookingId, string? note = null);
+        Task<bool> RejectRestoreAsync(int bookingId, string? note = null);
 
         // User Management
         Task<List<AdminUserResponseDto>> GetAllUsersAsync(int page = 1, int pageSize = 10);
         Task<AdminUserResponseDto> GetUserByIdAsync(int userId);
+        Task<AdminUserResponseDto> CreateUserAsync(RegisterUserDto registerDto);
         Task<AdminUserResponseDto> UpdateUserStatusAsync(int userId, UpdateUserStatusDto statusDto);
         Task<bool> DeleteUserAsync(int userId);
 

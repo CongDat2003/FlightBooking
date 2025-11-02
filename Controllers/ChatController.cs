@@ -20,10 +20,25 @@ namespace FlightBooking.Controllers
         [HttpPost("send")]
         public async Task<ActionResult<MessageResponseDto>> SendMessage([FromBody] CreateMessageDto messageDto)
         {
+            _logger.LogInformation($"=== ChatController.SendMessage ===");
+            _logger.LogInformation($"Received: UserId={messageDto.UserId}, Content length={messageDto.Content?.Length ?? 0}, SenderType={messageDto.SenderType}");
+            
             try
             {
+                if (messageDto == null)
+                {
+                    _logger.LogError("MessageDto is null");
+                    return BadRequest(new { message = "Request body is required" });
+                }
+                
                 var message = await _chatService.SendMessageAsync(messageDto);
+                _logger.LogInformation($"Message sent successfully: MessageId={message.MessageId}");
                 return Ok(message);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning($"Validation error: {ex.Message}");
+                return BadRequest(new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -35,14 +50,17 @@ namespace FlightBooking.Controllers
         [HttpGet("conversation")]
         public async Task<ActionResult<ChatConversationDto>> GetConversation([FromQuery] int? userId = null)
         {
+            _logger.LogInformation($"=== ChatController.GetConversation - userId: {userId} ===");
+            
             try
             {
                 var conversation = await _chatService.GetConversationAsync(userId);
+                _logger.LogInformation($"Conversation loaded: {conversation.Messages.Count} messages, {conversation.UnreadCount} unread");
                 return Ok(conversation);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting conversation");
+                _logger.LogError(ex, $"Error getting conversation for userId: {userId}");
                 return BadRequest(new { message = ex.Message });
             }
         }

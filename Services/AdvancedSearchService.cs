@@ -22,8 +22,8 @@ namespace FlightBooking.Services
                 .Include(f => f.Seats)
                 .Where(f => f.DepartureAirport.AirportCode == searchDto.DepartureAirportCode
                          && f.ArrivalAirport.AirportCode == searchDto.ArrivalAirportCode
-                         && f.DepartureTime.Date == searchDto.DepartureDate.Date
-                         && f.Status == "SCHEDULED");
+                         && f.DepartureTime.Date == searchDto.DepartureDate.Date);
+                // Removed status filter to return all flights for categorization in UI
 
             // Apply filters
             if (searchDto.Airlines?.Any() == true)
