@@ -49,6 +49,7 @@ namespace FlightBooking.DTOs
         public decimal TotalAmount { get; set; }
         public string PaymentStatus { get; set; }
         public DateTime BookingDate { get; set; }
+        public int UserId { get; set; }
         public FlightResponseDto Flight { get; set; }
         public List<BookedSeatDto> Seats { get; set; } = new List<BookedSeatDto>();
     }

@@ -114,5 +114,19 @@ namespace FlightBooking.Controllers.Admin
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpPost("generate-seats-for-all")]
+        public async Task<ActionResult<GenerateSeatsResultDto>> GenerateSeatsForAllFlights()
+        {
+            try
+            {
+                var result = await _adminService.GenerateSeatsForAllFlightsWithoutSeatsAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }
