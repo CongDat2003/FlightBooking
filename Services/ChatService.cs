@@ -34,7 +34,7 @@ namespace FlightBooking.Services
                     UserId = messageDto.UserId,
                     Content = messageDto.Content?.Trim() ?? string.Empty,
                     SenderType = string.IsNullOrWhiteSpace(messageDto.SenderType) ? "USER" : messageDto.SenderType.ToUpper(),
-                    Status = "SENT",
+                    IsRead = false,
                     CreatedAt = DateTime.Now
                 };
 
@@ -123,11 +123,11 @@ namespace FlightBooking.Services
                 int unreadCount;
                 if (userId.HasValue && userId.Value > 0)
                 {
-                    unreadCount = messages.Count(m => m.Status == "SENT" && (m.SenderType == "ADMIN" || m.SenderType == "SYSTEM"));
+                    unreadCount = messages.Count(m => !m.IsRead && (m.SenderType == "ADMIN" || m.SenderType == "SYSTEM"));
                 }
                 else
                 {
-                    unreadCount = messages.Count(m => m.Status == "SENT" && m.SenderType == "USER");
+                    unreadCount = messages.Count(m => !m.IsRead && m.SenderType == "USER");
                 }
 
                 var conversationDto = new ChatConversationDto
@@ -139,7 +139,7 @@ namespace FlightBooking.Services
                         UserName = m.User?.FullName ?? (m.SenderType == "ADMIN" ? "Admin" : (m.SenderType == "SYSTEM" ? "Hệ thống" : "User")),
                         Content = m.Content ?? string.Empty,
                         SenderType = m.SenderType ?? "USER",
-                        Status = m.Status ?? "SENT",
+                        IsRead = m.IsRead,
                         IsAutoReply = m.IsAutoReply,
                         CreatedAt = m.CreatedAt,
                         ReadAt = m.ReadAt
@@ -164,7 +164,7 @@ namespace FlightBooking.Services
             if (message == null)
                 throw new ArgumentException("Message not found");
 
-            message.Status = "READ";
+            message.IsRead = true;
             message.ReadAt = DateTime.Now;
             await _context.SaveChangesAsync();
 
@@ -175,7 +175,7 @@ namespace FlightBooking.Services
         {
             var query = _context.Messages
                 .Include(m => m.User)
-                .Where(m => m.Status == "SENT")
+                .Where(m => !m.IsRead)
                 .AsQueryable();
 
             if (userId.HasValue)
@@ -198,7 +198,7 @@ namespace FlightBooking.Services
                 UserName = m.User?.FullName ?? "User",
                 Content = m.Content,
                 SenderType = m.SenderType,
-                Status = m.Status,
+                IsRead = m.IsRead,
                 IsAutoReply = m.IsAutoReply,
                 CreatedAt = m.CreatedAt,
                 ReadAt = m.ReadAt
@@ -219,16 +219,16 @@ namespace FlightBooking.Services
                 UserId = originalMessage.UserId,
                 Content = content,
                 SenderType = "ADMIN",
-                Status = "SENT",
+                IsRead = false,
                 CreatedAt = DateTime.Now
             };
 
             _context.Messages.Add(reply);
             
             // Đánh dấu tin nhắn gốc đã đọc nếu chưa
-            if (originalMessage.Status == "SENT")
+            if (!originalMessage.IsRead)
             {
-                originalMessage.Status = "READ";
+                originalMessage.IsRead = true;
                 originalMessage.ReadAt = DateTime.Now;
             }
 
@@ -243,7 +243,7 @@ namespace FlightBooking.Services
             {
                 var messages = await _context.Messages
                     .Include(m => m.User)
-                    .Where(m => m.SenderType == "USER" && m.Status == "SENT" && m.UserId != null)
+                    .Where(m => m.SenderType == "USER" && !m.IsRead && m.UserId != null)
                     .OrderBy(m => m.CreatedAt)
                     .ToListAsync();
 
@@ -255,7 +255,7 @@ namespace FlightBooking.Services
                     UserEmail = m.User?.Email ?? string.Empty,
                     Content = m.Content ?? string.Empty,
                     SenderType = m.SenderType ?? "USER",
-                    Status = m.Status ?? "SENT",
+                    IsRead = m.IsRead,
                     IsAutoReply = m.IsAutoReply,
                     CreatedAt = m.CreatedAt,
                     ReadAt = m.ReadAt
@@ -271,12 +271,12 @@ namespace FlightBooking.Services
         public async Task MarkMessagesAsReadAsync(int userId)
         {
             var unreadMessages = await _context.Messages
-                .Where(m => m.UserId == userId && m.SenderType == "ADMIN" && m.Status == "SENT")
+                .Where(m => m.UserId == userId && m.SenderType == "ADMIN" && !m.IsRead)
                 .ToListAsync();
 
             foreach (var message in unreadMessages)
             {
-                message.Status = "READ";
+                message.IsRead = true;
                 message.ReadAt = DateTime.Now;
             }
 
@@ -295,7 +295,7 @@ namespace FlightBooking.Services
                 UserId = userId,
                 Content = content,
                 SenderType = "ADMIN",
-                Status = "SENT",
+                IsRead = false,
                 CreatedAt = DateTime.Now
             };
 
@@ -321,7 +321,7 @@ namespace FlightBooking.Services
                 UserName = message.User?.FullName ?? (message.SenderType == "ADMIN" ? "Admin" : "User"),
                 Content = message.Content,
                 SenderType = message.SenderType,
-                Status = message.Status,
+                IsRead = message.IsRead,
                 IsAutoReply = message.IsAutoReply,
                 CreatedAt = message.CreatedAt,
                 ReadAt = message.ReadAt

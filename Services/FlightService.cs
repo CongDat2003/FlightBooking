@@ -150,6 +150,36 @@ namespace FlightBooking.Services
                 if (seatClass == null)
                     throw new ArgumentException("Seat class not found");
 
+                // Prevent duplicate booking by CCCD/CMND for same flight and departure date (regardless of user and name)
+                var idsInRequest = bookingDto.PassengerDetails
+                    .Select(p => (p.PassengerIdNumber ?? string.Empty).Trim())
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+
+                if (idsInRequest.Count > 0)
+                {
+                    var activeStatuses = new[] { "PENDING", "CONFIRMED", "RESTORE_PENDING" };
+
+                    var existedIds = await _context.BookingSeats
+                        .Include(bs => bs.Booking)
+                            .ThenInclude(b => b.Flight)
+                        .Where(bs =>
+                            bs.Booking.FlightId == bookingDto.FlightId &&
+                            bs.Booking.Flight.DepartureTime.Date == flight.DepartureTime.Date &&
+                            activeStatuses.Contains(bs.Booking.BookingStatus) &&
+                            bs.PassengerIdNumber != null && bs.PassengerIdNumber != string.Empty &&
+                            idsInRequest.Contains(bs.PassengerIdNumber))
+                        .Select(bs => bs.PassengerIdNumber)
+                        .Distinct()
+                        .ToListAsync();
+
+                    if (existedIds.Any())
+                    {
+                        throw new InvalidOperationException("CMND/CCCD đã có đặt chỗ cho chuyến bay này trong ngày này. Vui lòng dùng CMND/CCCD khác hoặc hủy vé cũ.");
+                    }
+                }
+
                 // Get available seats for the selected class
                 var availableSeats = flight.Seats
                     .Where(s => s.ClassId == bookingDto.SeatClassId && s.IsAvailable == true)
@@ -244,6 +274,7 @@ namespace FlightBooking.Services
                 TotalAmount = booking.TotalAmount,
                 PaymentStatus = booking.PaymentStatus,
                 BookingDate = booking.BookingDate ?? DateTime.Now,
+                UserId = booking.UserId,
                 Flight = new FlightResponseDto
                 {
                     FlightId = booking.Flight.FlightId,
@@ -287,6 +318,7 @@ namespace FlightBooking.Services
                 TotalAmount = booking.TotalAmount,
                 PaymentStatus = booking.PaymentStatus,
                 BookingDate = booking.BookingDate ?? DateTime.Now,
+                UserId = booking.UserId,
                 Flight = new FlightResponseDto
                 {
                     FlightId = booking.Flight.FlightId,
@@ -329,6 +361,7 @@ namespace FlightBooking.Services
                 TotalAmount = booking.TotalAmount,
                 PaymentStatus = booking.PaymentStatus,
                 BookingDate = booking.BookingDate ?? DateTime.Now,
+                UserId = booking.UserId,
                 Flight = new FlightResponseDto
                 {
                     FlightId = booking.Flight.FlightId,

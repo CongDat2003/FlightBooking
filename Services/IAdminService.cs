@@ -15,6 +15,7 @@ namespace FlightBooking.Services
         Task<AdminFlightResponseDto> UpdateFlightAsync(int flightId, UpdateFlightDto flightDto);
         Task<bool> DeleteFlightAsync(int flightId);
         Task<bool> GenerateSeatsForFlightAsync(int flightId);
+        Task<GenerateSeatsResultDto> GenerateSeatsForAllFlightsWithoutSeatsAsync();
 
         // Booking Management
         Task<List<AdminBookingResponseDto>> GetAllBookingsAsync(int page = 1, int pageSize = 10);

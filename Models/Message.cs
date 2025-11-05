@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace FlightBooking.Models
 {
+    [Table("Messages")]
     public class Message
     {
         [Key]
@@ -17,8 +18,7 @@ namespace FlightBooking.Models
         [StringLength(20)]
         public string SenderType { get; set; } = "USER"; // USER, ADMIN, SYSTEM
 
-        [StringLength(20)]
-        public string Status { get; set; } = "SENT"; // SENT, READ
+        public bool IsRead { get; set; } = false; // false = chưa đọc, true = đã đọc
 
         public bool IsAutoReply { get; set; } = false; // true nếu là auto-reply
 

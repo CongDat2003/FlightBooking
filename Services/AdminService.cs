@@ -122,10 +122,25 @@ namespace FlightBooking.Services
 
             if (flight == null) return false;
 
+            // Kiểm tra xem chuyến bay đã có ghế chưa (tránh tạo trùng)
+            var existingSeats = await _context.Seats.Where(s => s.FlightId == flightId).ToListAsync();
+            if (existingSeats.Any())
+            {
+                // Nếu đã có ghế rồi thì không tạo lại
+                return true;
+            }
+
             var seatClasses = await _context.SeatClasses.ToListAsync();
-            var economyClass = seatClasses.First(sc => sc.ClassName == "ECONOMY");
-            var businessClass = seatClasses.First(sc => sc.ClassName == "BUSINESS");
-            var firstClass = seatClasses.First(sc => sc.ClassName == "FIRST_CLASS");
+            
+            // Kiểm tra và lấy seat classes với error handling
+            var economyClass = seatClasses.FirstOrDefault(sc => sc.ClassName == "ECONOMY");
+            var businessClass = seatClasses.FirstOrDefault(sc => sc.ClassName == "BUSINESS");
+            var firstClass = seatClasses.FirstOrDefault(sc => sc.ClassName == "FIRST_CLASS");
+
+            if (economyClass == null || businessClass == null || firstClass == null)
+            {
+                throw new InvalidOperationException("Seat classes (ECONOMY, BUSINESS, FIRST_CLASS) must exist in database before creating flights.");
+            }
 
             var seats = new List<Seat>();
             var columns = new[] { "A", "B", "C", "D", "E", "F" };
@@ -143,7 +158,8 @@ namespace FlightBooking.Services
                         SeatColumn = columns[col],
                         ClassId = firstClass.ClassId,
                         IsWindow = col == 0 || col == columns.Length - 1,
-                        IsAisle = col == 2 || col == 3
+                        IsAisle = col == 2 || col == 3,
+                        IsAvailable = true // Đánh dấu ghế có sẵn khi tạo
                     });
                 }
             }
@@ -161,7 +177,8 @@ namespace FlightBooking.Services
                         SeatColumn = columns[col],
                         ClassId = businessClass.ClassId,
                         IsWindow = col == 0 || col == columns.Length - 1,
-                        IsAisle = col == 2 || col == 3
+                        IsAisle = col == 2 || col == 3,
+                        IsAvailable = true // Đánh dấu ghế có sẵn khi tạo
                     });
                 }
             }
@@ -182,16 +199,111 @@ namespace FlightBooking.Services
                         ClassId = economyClass.ClassId,
                         IsWindow = col == 0 || col == columns.Length - 1,
                         IsAisle = col == 2 || col == 3,
-                        IsEmergencyExit = row == 12 || row == 13 // Emergency exit rows
+                        IsEmergencyExit = row == 12 || row == 13, // Emergency exit rows
+                        IsAvailable = true // Đánh dấu ghế có sẵn khi tạo
                     });
                     currentSeatCount++;
                 }
             }
 
-            _context.Seats.AddRange(seats);
-            await _context.SaveChangesAsync();
+            if (seats.Any())
+            {
+                _context.Seats.AddRange(seats);
+                await _context.SaveChangesAsync();
+            }
 
             return true;
+        }
+
+        public async Task<GenerateSeatsResultDto> GenerateSeatsForAllFlightsWithoutSeatsAsync()
+        {
+            var result = new GenerateSeatsResultDto();
+            
+            // Lấy tất cả chuyến bay với AircraftType
+            var allFlights = await _context.Flights
+                .Include(f => f.AircraftType)
+                .ToListAsync();
+            
+            // Tìm các chuyến bay chưa có ghế
+            var flightsWithoutSeats = new List<Flight>();
+            
+            foreach (var flight in allFlights)
+            {
+                var seatCount = await _context.Seats
+                    .Where(s => s.FlightId == flight.FlightId)
+                    .CountAsync();
+                
+                if (seatCount == 0)
+                {
+                    flightsWithoutSeats.Add(flight);
+                }
+            }
+            
+            // Tạo ghế cho từng chuyến bay
+            foreach (var flight in flightsWithoutSeats)
+            {
+                try
+                {
+                    // Xóa các ghế cũ nếu có (để tạo lại)
+                    var oldSeats = await _context.Seats
+                        .Where(s => s.FlightId == flight.FlightId)
+                        .ToListAsync();
+                    
+                    if (oldSeats.Any())
+                    {
+                        _context.Seats.RemoveRange(oldSeats);
+                        await _context.SaveChangesAsync();
+                    }
+                    
+                    // Tạo ghế mới
+                    var seatsCreated = await GenerateSeatsForFlightAsync(flight.FlightId);
+                    
+                    if (seatsCreated)
+                    {
+                        var seatCount = await _context.Seats
+                            .Where(s => s.FlightId == flight.FlightId)
+                            .CountAsync();
+                        
+                        result.TotalSeatsCreated += seatCount;
+                        result.SuccessfulFlights++;
+                        result.FlightDetails.Add(new FlightSeatsInfoDto
+                        {
+                            FlightId = flight.FlightId,
+                            FlightNumber = flight.FlightNumber,
+                            SeatsCreated = seatCount,
+                            Success = true
+                        });
+                    }
+                    else
+                    {
+                        result.FailedFlights++;
+                        result.FlightDetails.Add(new FlightSeatsInfoDto
+                        {
+                            FlightId = flight.FlightId,
+                            FlightNumber = flight.FlightNumber,
+                            SeatsCreated = 0,
+                            Success = false,
+                            ErrorMessage = "Không thể tạo ghế cho chuyến bay này"
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    result.FailedFlights++;
+                    result.FlightDetails.Add(new FlightSeatsInfoDto
+                    {
+                        FlightId = flight.FlightId,
+                        FlightNumber = flight.FlightNumber,
+                        SeatsCreated = 0,
+                        Success = false,
+                        ErrorMessage = ex.Message
+                    });
+                }
+            }
+            
+            result.TotalFlightsProcessed = flightsWithoutSeats.Count;
+            
+            return result;
         }
 
         public async Task<List<AdminFlightResponseDto>> GetAllFlightsAsync(int page = 1, int pageSize = 10)
