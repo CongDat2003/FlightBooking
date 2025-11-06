@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../../UI/FlightBooking"
+		},
+		{
+			"path": "../../../../../vnpay_cs/vnpay_cs"
+		},
+		{
+			"path": "../../../UI/WebAdmin"
+		}
+	],
+	"settings": {}
+}

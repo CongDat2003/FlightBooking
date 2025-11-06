@@ -11,5 +11,7 @@ namespace FlightBooking.Services
         Task<PaymentResponseDto> ProcessCallbackAsync(PaymentCallbackDto callbackDto);
         Task<PaymentResponseDto> GetPaymentStatusAsync(string transactionId);
         Task<bool> RefundPaymentAsync(int paymentId, decimal? refundAmount = null);
+        Task<bool> DeletePaymentAsync(int paymentId);
+        Task<PaymentResponseDto> UpdatePaymentAsync(int paymentId, UpdatePaymentDto dto);
     }
 }

@@ -6,7 +6,15 @@ using FlightBooking.Configuration;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Use camelCase for JSON property names to match Android/JavaScript
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        // Ensure UTF-8 encoding for Vietnamese characters
+        options.JsonSerializerOptions.Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -34,6 +42,8 @@ builder.Services.AddScoped<IAdvancedSearchService, AdvancedSearchService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ISMSService, SMSService>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<IServiceService, ServiceService>();
 
 // Add HttpContextAccessor for accessing HttpContext in services
 builder.Services.AddHttpContextAccessor();
@@ -84,4 +94,6 @@ using (var scope = app.Services.CreateScope())
     context.Database.EnsureCreated();
 }
 
+// Start the web server
 app.Run();
+

@@ -1,0 +1,9 @@
+@echo off
+echo Starting Flight Booking API...
+echo.
+echo Building project...
+dotnet build
+echo.
+echo Starting API server on port 501...
+dotnet run --launch-profile http
+pause

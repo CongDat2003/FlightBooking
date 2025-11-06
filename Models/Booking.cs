@@ -33,6 +33,8 @@ public partial class Booking
 
     public virtual ICollection<BookingSeat> BookingSeats { get; set; } = new List<BookingSeat>();
 
+    public virtual ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
+
     [ForeignKey("FlightId")]
     public virtual Flight Flight { get; set; } = null!;
 

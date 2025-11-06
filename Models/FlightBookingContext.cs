@@ -37,6 +37,10 @@ public partial class FlightBookingContext : DbContext
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<Message> Messages { get; set; }
+    public DbSet<Meal> Meals { get; set; }
+    public DbSet<Luggage> Luggages { get; set; }
+    public DbSet<Insurance> Insurances { get; set; }
+    public DbSet<BookingService> BookingServices { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
@@ -394,6 +398,92 @@ public partial class FlightBookingContext : DbContext
             .HasIndex(m => new { m.UserId, m.CreatedAt });
         modelBuilder.Entity<Message>()
             .HasIndex(m => m.SenderType);
+
+        // Meal configurations
+        modelBuilder.Entity<Meal>(entity =>
+        {
+            entity.ToTable("meals");
+            entity.Property(e => e.MealId).HasColumnName("meal_id");
+            entity.Property(e => e.MealName).HasMaxLength(100).HasColumnName("meal_name");
+            entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
+            entity.Property(e => e.Price).HasColumnType("decimal(10,2)").HasColumnName("price");
+            entity.Property(e => e.MealType).HasMaxLength(50).HasColumnName("meal_type");
+            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_url");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // Luggage configurations
+        modelBuilder.Entity<Luggage>(entity =>
+        {
+            entity.ToTable("luggage");
+            entity.Property(e => e.LuggageId).HasColumnName("luggage_id");
+            entity.Property(e => e.LuggageName).HasMaxLength(100).HasColumnName("luggage_name");
+            entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
+            entity.Property(e => e.Price).HasColumnType("decimal(10,2)").HasColumnName("price");
+            entity.Property(e => e.WeightLimit).HasColumnType("decimal(5,2)").HasColumnName("weight_limit");
+            entity.Property(e => e.LuggageType).HasMaxLength(50).HasColumnName("luggage_type");
+            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_url");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // Insurance configurations
+        modelBuilder.Entity<Insurance>(entity =>
+        {
+            entity.ToTable("insurance");
+            entity.Property(e => e.InsuranceId).HasColumnName("insurance_id");
+            entity.Property(e => e.InsuranceName).HasMaxLength(100).HasColumnName("insurance_name");
+            entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
+            entity.Property(e => e.Price).HasColumnType("decimal(10,2)").HasColumnName("price");
+            entity.Property(e => e.CoverageAmount).HasColumnType("decimal(10,2)").HasColumnName("coverage_amount");
+            entity.Property(e => e.InsuranceType).HasMaxLength(50).HasColumnName("insurance_type");
+            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_url");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // BookingService configurations
+        modelBuilder.Entity<BookingService>(entity =>
+        {
+            entity.ToTable("booking_services");
+            entity.Property(e => e.BookingServiceId).HasColumnName("booking_service_id");
+            entity.Property(e => e.BookingId).HasColumnName("booking_id");
+            entity.Property(e => e.ServiceType).HasMaxLength(50).HasColumnName("service_type");
+            entity.Property(e => e.MealId).HasColumnName("meal_id");
+            entity.Property(e => e.LuggageId).HasColumnName("luggage_id");
+            entity.Property(e => e.InsuranceId).HasColumnName("insurance_id");
+            entity.Property(e => e.Price).HasColumnType("decimal(10,2)").HasColumnName("price");
+            entity.Property(e => e.Quantity).HasColumnName("quantity");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
+
+            entity.HasOne(d => d.Booking)
+                .WithMany(b => b.BookingServices)
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_booking_services_booking");
+
+            entity.HasOne(d => d.Meal)
+                .WithMany()
+                .HasForeignKey(d => d.MealId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_booking_services_meal");
+
+            entity.HasOne(d => d.Luggage)
+                .WithMany()
+                .HasForeignKey(d => d.LuggageId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_booking_services_luggage");
+
+            entity.HasOne(d => d.Insurance)
+                .WithMany()
+                .HasForeignKey(d => d.InsuranceId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_booking_services_insurance");
+        });
 
         OnModelCreatingPartial(modelBuilder);
     }
