@@ -1,4 +1,5 @@
-﻿using FlightBooking.DTOs.Admin;
+﻿using FlightBooking.DTOs;
+using FlightBooking.DTOs.Admin;
 using FlightBooking.DTOs.User;
 
 namespace FlightBooking.Services
@@ -14,10 +15,11 @@ namespace FlightBooking.Services
         Task<AdminFlightResponseDto> CreateFlightAsync(CreateFlightDto flightDto);
         Task<AdminFlightResponseDto> UpdateFlightAsync(int flightId, UpdateFlightDto flightDto);
         Task<bool> DeleteFlightAsync(int flightId);
-        Task<bool> GenerateSeatsForFlightAsync(int flightId);
+        Task<bool> GenerateSeatsForFlightAsync(int flightId, bool forceRegenerate = false);
         Task<GenerateSeatsResultDto> GenerateSeatsForAllFlightsWithoutSeatsAsync();
 
         // Booking Management
+        Task<AdminBookingResponseDto> CreateBookingAsync(CreateBookingDto bookingDto);
         Task<List<AdminBookingResponseDto>> GetAllBookingsAsync(int page = 1, int pageSize = 10);
         Task<AdminBookingResponseDto> GetBookingByIdAsync(int bookingId);
         Task<AdminBookingResponseDto> UpdateBookingStatusAsync(int bookingId, UpdateBookingStatusDto statusDto);
@@ -30,6 +32,7 @@ namespace FlightBooking.Services
         Task<List<AdminUserResponseDto>> GetAllUsersAsync(int page = 1, int pageSize = 10);
         Task<AdminUserResponseDto> GetUserByIdAsync(int userId);
         Task<AdminUserResponseDto> CreateUserAsync(RegisterUserDto registerDto);
+        Task<AdminUserResponseDto> UpdateUserAsync(int userId, UpdateUserDto updateDto);
         Task<AdminUserResponseDto> UpdateUserStatusAsync(int userId, UpdateUserStatusDto statusDto);
         Task<bool> DeleteUserAsync(int userId);
 

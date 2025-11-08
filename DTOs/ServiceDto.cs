@@ -11,6 +11,7 @@ namespace FlightBooking.DTOs
         public decimal Price { get; set; }
         public string? MealType { get; set; }
         public string? ImageUrl { get; set; }
+        public int? ClassId { get; set; } // Nullable - null means available for all classes
         public bool IsActive { get; set; }
     }
 
@@ -61,7 +62,7 @@ namespace FlightBooking.DTOs
         public string LuggageName { get; set; } = null!;
         public string? Description { get; set; }
         public decimal Price { get; set; }
-        public decimal WeightLimit { get; set; }
+        public int WeightLimit { get; set; }
         public string? LuggageType { get; set; }
         public string? ImageUrl { get; set; }
         public bool IsActive { get; set; }
@@ -81,8 +82,8 @@ namespace FlightBooking.DTOs
         public decimal Price { get; set; }
 
         [Required]
-        [Range(0, double.MaxValue)]
-        public decimal WeightLimit { get; set; }
+        [Range(0, int.MaxValue)]
+        public int WeightLimit { get; set; }
 
         [StringLength(50)]
         public string? LuggageType { get; set; }
@@ -102,8 +103,8 @@ namespace FlightBooking.DTOs
         [Range(0, double.MaxValue)]
         public decimal? Price { get; set; }
 
-        [Range(0, double.MaxValue)]
-        public decimal? WeightLimit { get; set; }
+        [Range(0, int.MaxValue)]
+        public int? WeightLimit { get; set; }
 
         [StringLength(50)]
         public string? LuggageType { get; set; }
@@ -203,5 +204,6 @@ namespace FlightBooking.DTOs
         public int Quantity { get; set; } = 1;
     }
 }
+
 
 

@@ -254,6 +254,11 @@ namespace FlightBooking.Services
 
         private string GeneratePaymentConfirmationHtml(Payment payment)
         {
+            var booking = payment.Booking;
+            var flight = booking?.Flight;
+            var departureAirport = flight?.DepartureAirport;
+            var arrivalAirport = flight?.ArrivalAirport;
+            
             return $@"
 <!DOCTYPE html>
 <html>
@@ -262,31 +267,84 @@ namespace FlightBooking.Services
     <style>
         body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
         .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background: #27ae60; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+        .header {{ background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
         .content {{ background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }}
         .payment-details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        .booking-info {{ background: #e8f5e9; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; border-radius: 4px; }}
+        .flight-details {{ display: flex; justify-content: space-between; align-items: center; margin: 15px 0; }}
+        .airport {{ text-align: center; flex: 1; }}
+        .arrow {{ flex: 0 0 50px; text-align: center; font-size: 24px; color: #27ae60; }}
+        .highlight {{ color: #27ae60; font-weight: bold; font-size: 18px; }}
+        .notes-box {{ background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+        .footer {{ text-align: center; margin-top: 30px; color: #666; font-size: 14px; }}
+        .disclaimer {{ font-size: 12px; color: #999; margin-top: 20px; }}
     </style>
 </head>
 <body>
     <div class='container'>
         <div class='header'>
             <h1>💳 Thanh toán thành công!</h1>
+            <p>Cảm ơn bạn đã thanh toán</p>
         </div>
         <div class='content'>
-            <p>Thanh toán của bạn đã được xử lý thành công.</p>
+            <h2>Xin chào {booking?.User?.FullName ?? "Quý khách"},</h2>
+            <p>Thanh toán của bạn đã được xử lý thành công. Dưới đây là thông tin chi tiết:</p>
             
             <div class='payment-details'>
-                <h3>Chi tiết giao dịch:</h3>
+                <h3>📋 Chi tiết giao dịch:</h3>
                 <ul>
                     <li><strong>Mã giao dịch:</strong> {payment.TransactionId}</li>
-                    <li><strong>Số tiền:</strong> {payment.Amount:N0} VND</li>
-                    <li><strong>Phương thức:</strong> {payment.PaymentMethod}</li>
-                    <li><strong>Thời gian:</strong> {payment.ProcessedAt:dd/MM/yyyy HH:mm}</li>
-                    <li><strong>Mã đặt chỗ:</strong> {payment.Booking.BookingReference}</li>
+                    <li><strong>Số tiền:</strong> <span class='highlight'>{payment.Amount:N0} VND</span></li>
+                    <li><strong>Phương thức thanh toán:</strong> {payment.PaymentMethod}</li>
+                    <li><strong>Thời gian:</strong> {(payment.ProcessedAt ?? DateTime.Now):dd/MM/yyyy HH:mm}</li>
                 </ul>
             </div>
             
-            <p>Vé của bạn đã được xác nhận. Chúc bạn có chuyến bay vui vẻ!</p>
+            <div class='booking-info'>
+                <h3>✈️ Thông tin đặt chỗ:</h3>
+                <p><strong>Mã đặt chỗ:</strong> <span class='highlight'>{booking?.BookingReference ?? "N/A"}</span></p>
+                {(flight != null ? $@"
+                <p><strong>Chuyến bay:</strong> {flight.FlightNumber}</p>
+                <p><strong>Hãng bay:</strong> {flight.Airline?.AirlineName ?? "N/A"}</p>
+                {(departureAirport != null && arrivalAirport != null ? $@"
+                <div class='flight-details'>
+                    <div class='airport'>
+                        <h4>{departureAirport.AirportCode}</h4>
+                        <p>{departureAirport.AirportName}</p>
+                        <p><strong>{flight.DepartureTime:dd/MM/yyyy}</strong></p>
+                        <p><strong>{flight.DepartureTime:HH:mm}</strong></p>
+                    </div>
+                    <div class='arrow'>✈️</div>
+                    <div class='airport'>
+                        <h4>{arrivalAirport.AirportCode}</h4>
+                        <p>{arrivalAirport.AirportName}</p>
+                        <p><strong>{flight.ArrivalTime:dd/MM/yyyy}</strong></p>
+                        <p><strong>{flight.ArrivalTime:HH:mm}</strong></p>
+                    </div>
+                </div>
+                " : "")}
+                " : "")}
+            </div>
+            
+            <div class='notes-box'>
+                <h4>📝 Lưu ý quan trọng:</h4>
+                <ul>
+                    <li>Vui lòng <strong>lưu mã đặt chỗ</strong> để check-in online hoặc tại sân bay</li>
+                    <li>Có mặt tại sân bay trước <strong>2 giờ</strong> (chuyến bay nội địa) hoặc <strong>3 giờ</strong> (chuyến bay quốc tế)</li>
+                    <li>Mang theo <strong>giấy tờ tùy thân hợp lệ</strong> (CMND/CCCD/Hộ chiếu)</li>
+                    <li>Kiểm tra <strong>hành lý</strong> theo quy định của hãng bay</li>
+                    <li>Kiểm tra email thường xuyên để nhận thông báo về chuyến bay</li>
+                    <li>Nếu có thay đổi, vui lòng liên hệ hotline hoặc chat với admin</li>
+                </ul>
+            </div>
+            
+            <p>Vé của bạn đã được xác nhận. Chúc bạn có chuyến bay an toàn và vui vẻ! 🛫</p>
+        </div>
+        
+        <div class='footer'>
+            <p>Trân trọng,</p>
+            <p>Đội ngũ Flight Booking System</p>
+            <p class='disclaimer'>Email này được gửi tự động. Vui lòng không trả lời email này.</p>
         </div>
     </div>
 </body>
@@ -297,6 +355,13 @@ namespace FlightBooking.Services
         {
             var subject = "✈️ Mã xác thực đặt lại mật khẩu của bạn";
             var body = GeneratePasswordResetOtpHtml(otpCode, recipientName);
+            await SendEmailAsync(recipientEmail, subject, body, true);
+        }
+
+        public async Task SendRegistrationConfirmationEmailAsync(string recipientEmail, string recipientName, string username)
+        {
+            var subject = "🎉 Chào mừng đến với Flight Booking System!";
+            var body = GenerateRegistrationConfirmationHtml(recipientName, username);
             await SendEmailAsync(recipientEmail, subject, body, true);
         }
 
@@ -337,6 +402,66 @@ namespace FlightBooking.Services
             
             <p>Mã này sẽ hết hạn sau <strong>5 phút</strong>. Vui lòng không chia sẻ mã này với bất kỳ ai.</p>
             <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này.</p>
+        </div>
+        
+        <div class='footer'>
+            <p>Trân trọng,</p>
+            <p>Đội ngũ Flight Booking System</p>
+            <p class='disclaimer'>Email này được gửi tự động. Vui lòng không trả lời email này.</p>
+        </div>
+    </div>
+</body>
+</html>";
+        }
+
+        private string GenerateRegistrationConfirmationHtml(string recipientName, string username)
+        {
+            return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+        .content {{ background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }}
+        .welcome-box {{ background: white; padding: 25px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        .info-box {{ background: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 15px 0; border-radius: 4px; }}
+        .footer {{ text-align: center; margin-top: 30px; color: #666; font-size: 14px; }}
+        .disclaimer {{ font-size: 12px; color: #999; margin-top: 20px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>🎉 Đăng ký thành công!</h1>
+            <p>Chào mừng bạn đến với Flight Booking System</p>
+        </div>
+        
+        <div class='content'>
+            <h2>Xin chào {(string.IsNullOrEmpty(recipientName) ? "bạn" : recipientName)},</h2>
+            <p>Cảm ơn bạn đã đăng ký tài khoản tại Flight Booking System!</p>
+            
+            <div class='welcome-box'>
+                <h3>📋 Thông tin tài khoản của bạn:</h3>
+                <ul>
+                    <li><strong>Tên đăng nhập:</strong> {username}</li>
+                    <li><strong>Họ tên:</strong> {(string.IsNullOrEmpty(recipientName) ? "N/A" : recipientName)}</li>
+                </ul>
+            </div>
+            
+            <div class='info-box'>
+                <h4>✨ Bạn có thể:</h4>
+                <ul>
+                    <li>Đặt vé máy bay nhanh chóng và dễ dàng</li>
+                    <li>Quản lý các chuyến bay đã đặt</li>
+                    <li>Nhận thông báo về các chuyến bay của bạn</li>
+                    <li>Tích lũy điểm thưởng cho mỗi chuyến bay</li>
+                </ul>
+            </div>
+            
+            <p>Hãy bắt đầu hành trình của bạn ngay hôm nay! 🛫</p>
         </div>
         
         <div class='footer'>

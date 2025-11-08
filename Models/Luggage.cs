@@ -21,8 +21,7 @@ public partial class Luggage
     public decimal Price { get; set; }
 
     [Required]
-    [Column(TypeName = "decimal(5,2)")]
-    public decimal WeightLimit { get; set; } // Weight in kg
+    public int WeightLimit { get; set; } // Weight in kg
 
     [StringLength(50)]
     public string? LuggageType { get; set; } // HAND, CHECKED, OVERWEIGHT, etc.
@@ -36,5 +35,25 @@ public partial class Luggage
 
     public DateTime? UpdatedAt { get; set; }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

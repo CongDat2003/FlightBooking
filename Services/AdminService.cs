@@ -1,4 +1,5 @@
-﻿using FlightBooking.DTOs.Admin;
+﻿using FlightBooking.DTOs;
+using FlightBooking.DTOs.Admin;
 using FlightBooking.DTOs.User;
 using FlightBooking.Models;
 using Microsoft.EntityFrameworkCore;
@@ -114,7 +115,7 @@ namespace FlightBooking.Services
             return await GetFlightByIdAsync(flight.FlightId);
         }
 
-        public async Task<bool> GenerateSeatsForFlightAsync(int flightId)
+        public async Task<bool> GenerateSeatsForFlightAsync(int flightId, bool forceRegenerate = false)
         {
             var flight = await _context.Flights
                 .Include(f => f.AircraftType)
@@ -123,11 +124,32 @@ namespace FlightBooking.Services
             if (flight == null) return false;
 
             // Kiểm tra xem chuyến bay đã có ghế chưa (tránh tạo trùng)
-            var existingSeats = await _context.Seats.Where(s => s.FlightId == flightId).ToListAsync();
+            var existingSeats = await _context.Seats
+                .Include(s => s.BookingSeats)
+                .Where(s => s.FlightId == flightId)
+                .ToListAsync();
+            
+            bool isRegenerating = false;
             if (existingSeats.Any())
             {
-                // Nếu đã có ghế rồi thì không tạo lại
-                return true;
+                if (forceRegenerate)
+                {
+                    // Kiểm tra xem có ghế nào đã được đặt không
+                    if (existingSeats.Any(s => s.BookingSeats.Any()))
+                    {
+                        throw new InvalidOperationException("Cannot regenerate seats for flight with booked seats");
+                    }
+                    
+                    // Xóa ghế cũ để tạo lại
+                    _context.Seats.RemoveRange(existingSeats);
+                    await _context.SaveChangesAsync();
+                    isRegenerating = true;
+                }
+                else
+                {
+                    // Nếu đã có ghế rồi thì không tạo lại
+                    return true;
+                }
             }
 
             var seatClasses = await _context.SeatClasses.ToListAsync();
@@ -210,6 +232,13 @@ namespace FlightBooking.Services
             {
                 _context.Seats.AddRange(seats);
                 await _context.SaveChangesAsync();
+                
+                // Gửi thông báo khi tạo/tạo lại ghế
+                string notificationMessage = isRegenerating
+                    ? $"Ghế của chuyến bay {flight.FlightNumber} đã được tạo lại. Tổng cộng {seats.Count} ghế đã sẵn sàng để đặt."
+                    : $"Ghế của chuyến bay {flight.FlightNumber} đã được tạo. Tổng cộng {seats.Count} ghế đã sẵn sàng để đặt.";
+                
+                await _notificationService.SendFlightUpdateAsync(flightId, "SEAT_GENERATED", notificationMessage);
             }
 
             return true;
@@ -452,13 +481,48 @@ namespace FlightBooking.Services
 
                 if (flight == null) return false;
 
+                // Cho phép xóa flight nếu đã quá hạn ngày và bị hủy
+                bool isPastDate = flight.DepartureTime < DateTime.Now;
+                bool isCancelled = flight.Status?.ToUpper() == "CANCELLED";
+                bool canDeleteWithBookings = isPastDate && isCancelled;
+
                 // Không cho phép xóa flight nếu còn bất kỳ booking nào liên kết (tránh lỗi FK/cascade)
-                if (flight.Bookings.Any())
+                // Trừ khi flight đã quá hạn và bị hủy
+                if (flight.Bookings.Any() && !canDeleteWithBookings)
                     throw new InvalidOperationException("Cannot delete flight with existing bookings");
 
                 // Kiểm tra có ghế đã được đặt không
-                if (flight.Seats.Any(s => s.BookingSeats.Any()))
+                // Trừ khi flight đã quá hạn và bị hủy
+                if (flight.Seats.Any(s => s.BookingSeats.Any()) && !canDeleteWithBookings)
                     throw new InvalidOperationException("Cannot delete flight with booked seats");
+
+                // Nếu flight đã quá hạn và bị hủy, xóa các bookings và entities liên quan trước
+                if (canDeleteWithBookings && flight.Bookings.Any())
+                {
+                    // Load các BookingServices và BookingSeats liên quan
+                    var bookingIds = flight.Bookings.Select(b => b.BookingId).ToList();
+                    var bookingSeats = await _context.BookingSeats
+                        .Where(bs => bookingIds.Contains(bs.BookingId))
+                        .ToListAsync();
+                    var bookingServices = await _context.BookingServices
+                        .Where(bs => bookingIds.Contains(bs.BookingId))
+                        .ToListAsync();
+
+                    // Xóa BookingSeats trước
+                    if (bookingSeats.Any())
+                    {
+                        _context.BookingSeats.RemoveRange(bookingSeats);
+                    }
+
+                    // Xóa BookingServices
+                    if (bookingServices.Any())
+                    {
+                        _context.BookingServices.RemoveRange(bookingServices);
+                    }
+
+                    // Xóa Bookings
+                    _context.Bookings.RemoveRange(flight.Bookings);
+                }
 
                 // Xóa tất cả seats trước
                 if (flight.Seats.Any())
@@ -479,6 +543,135 @@ namespace FlightBooking.Services
                 await transaction.RollbackAsync();
                 throw;
             }
+        }
+
+        public async Task<AdminBookingResponseDto> CreateBookingAsync(CreateBookingDto bookingDto)
+        {
+            // Validate passenger details count matches passengers
+            if (bookingDto.PassengerDetails.Count != bookingDto.Passengers)
+            {
+                throw new ArgumentException($"The number of passenger details ({bookingDto.PassengerDetails.Count}) does not match the number of passengers ({bookingDto.Passengers}).");
+            }
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // Validate flight and seat class
+                var flight = await _context.Flights
+                    .Include(f => f.Seats)
+                        .ThenInclude(s => s.Class)
+                    .Include(f => f.AircraftType)
+                    .FirstOrDefaultAsync(f => f.FlightId == bookingDto.FlightId);
+
+                if (flight == null)
+                    throw new ArgumentException("Flight not found");
+
+                // Validate seat class
+                var seatClass = await _context.SeatClasses
+                    .FirstOrDefaultAsync(sc => sc.ClassId == bookingDto.SeatClassId);
+
+                if (seatClass == null)
+                    throw new ArgumentException("Seat class not found");
+
+                // Check if flight has seats, if not, generate them
+                if (!flight.Seats.Any())
+                {
+                    await GenerateSeatsForFlightAsync(flight.FlightId, false);
+                    // Reload flight with seats
+                    flight = await _context.Flights
+                        .Include(f => f.Seats)
+                            .ThenInclude(s => s.Class)
+                        .FirstOrDefaultAsync(f => f.FlightId == bookingDto.FlightId);
+                }
+
+                // Get available seats for the selected class
+                var availableSeats = flight.Seats
+                    .Where(s => s.ClassId == bookingDto.SeatClassId && s.IsAvailable == true)
+                    .ToList();
+
+                // For admin: if not enough available seats, use all seats in class (including unavailable ones)
+                // Admin can manage seat availability manually
+                List<Seat> selectedSeats;
+                if (availableSeats.Count >= bookingDto.Passengers)
+                {
+                    // Randomly select from available seats
+                    var random = new Random();
+                    selectedSeats = availableSeats.OrderBy(x => random.Next()).Take(bookingDto.Passengers).ToList();
+                }
+                else
+                {
+                    // Not enough available seats - use available ones first, then use unavailable ones
+                    var allSeatsInClass = flight.Seats
+                        .Where(s => s.ClassId == bookingDto.SeatClassId)
+                        .OrderBy(s => s.IsAvailable == false) // Available seats first
+                        .ThenBy(s => s.SeatNumber)
+                        .Take(bookingDto.Passengers)
+                        .ToList();
+
+                    if (allSeatsInClass.Count < bookingDto.Passengers)
+                    {
+                        throw new InvalidOperationException($"Not enough seats in the {seatClass.ClassName} class. Requested: {bookingDto.Passengers}, Total seats: {allSeatsInClass.Count}. Please generate more seats for this flight.");
+                    }
+
+                    selectedSeats = allSeatsInClass;
+                }
+
+                // Calculate total amount
+                var totalAmount = selectedSeats.Sum(s => flight.BasePrice * (s.Class.PriceMultiplier ?? 1.0m) + (s.ExtraFee ?? 0m));
+
+                // Create booking
+                var bookingReference = GenerateBookingReference();
+                var booking = new Booking
+                {
+                    BookingReference = bookingReference,
+                    UserId = bookingDto.UserId,
+                    FlightId = bookingDto.FlightId,
+                    TotalAmount = totalAmount,
+                    Notes = bookingDto.Notes,
+                    BookingStatus = "PENDING",
+                    PaymentStatus = "PENDING"
+                };
+
+                _context.Bookings.Add(booking);
+                await _context.SaveChangesAsync();
+
+                // Create booking seats with individual passenger details
+                for (int i = 0; i < selectedSeats.Count; i++)
+                {
+                    var seat = selectedSeats[i];
+                    var passenger = bookingDto.PassengerDetails[i];
+                    var bookingSeat = new BookingSeat
+                    {
+                        BookingId = booking.BookingId,
+                        SeatId = seat.SeatId,
+                        PassengerName = passenger.PassengerName,
+                        PassengerIdNumber = passenger.PassengerIdNumber,
+                        SeatPrice = flight.BasePrice * (seat.Class.PriceMultiplier ?? 1.0m) + (seat.ExtraFee ?? 0m)
+                    };
+
+                    _context.BookingSeats.Add(bookingSeat);
+
+                    // Update seat availability
+                    seat.IsAvailable = false;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                // Return booking details
+                return await GetBookingByIdAsync(booking.BookingId);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        private string GenerateBookingReference()
+        {
+            return $"VN{DateTime.Now:ddMMyyyy}{new Random().Next(1000, 9999)}";
         }
 
         public async Task<List<AdminBookingResponseDto>> GetAllBookingsAsync(int page = 1, int pageSize = 10)
@@ -595,6 +788,12 @@ namespace FlightBooking.Services
                 .Include(b => b.BookingSeats)
                     .ThenInclude(bs => bs.Seat)
                         .ThenInclude(s => s.Class)
+                .Include(b => b.BookingServices)
+                    .ThenInclude(bs => bs.Meal)
+                .Include(b => b.BookingServices)
+                    .ThenInclude(bs => bs.Luggage)
+                .Include(b => b.BookingServices)
+                    .ThenInclude(bs => bs.Insurance)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
 
             if (booking == null)
@@ -621,6 +820,47 @@ namespace FlightBooking.Services
                     PassengerName = bs.PassengerName,
                     PassengerIdNumber = bs.PassengerIdNumber,
                     SeatPrice = bs.SeatPrice
+                }).ToList(),
+                Services = booking.BookingServices.Select(bs => new BookingServiceDto
+                {
+                    BookingServiceId = bs.BookingServiceId,
+                    BookingId = bs.BookingId,
+                    ServiceType = bs.ServiceType,
+                    Meal = bs.Meal != null ? new MealDto
+                    {
+                        MealId = bs.Meal.MealId,
+                        MealName = bs.Meal.MealName,
+                        Description = bs.Meal.Description,
+                        Price = bs.Meal.Price,
+                        MealType = bs.Meal.MealType,
+                        ImageUrl = bs.Meal.ImageUrl,
+                        ClassId = bs.Meal.ClassId,
+                        IsActive = bs.Meal.IsActive
+                    } : null,
+                    Luggage = bs.Luggage != null ? new LuggageDto
+                    {
+                        LuggageId = bs.Luggage.LuggageId,
+                        LuggageName = bs.Luggage.LuggageName,
+                        Description = bs.Luggage.Description,
+                        Price = bs.Luggage.Price,
+                        WeightLimit = bs.Luggage.WeightLimit,
+                        LuggageType = bs.Luggage.LuggageType,
+                        ImageUrl = bs.Luggage.ImageUrl,
+                        IsActive = bs.Luggage.IsActive
+                    } : null,
+                    Insurance = bs.Insurance != null ? new InsuranceDto
+                    {
+                        InsuranceId = bs.Insurance.InsuranceId,
+                        InsuranceName = bs.Insurance.InsuranceName,
+                        Description = bs.Insurance.Description,
+                        Price = bs.Insurance.Price,
+                        CoverageAmount = bs.Insurance.CoverageAmount,
+                        InsuranceType = bs.Insurance.InsuranceType,
+                        ImageUrl = bs.Insurance.ImageUrl,
+                        IsActive = bs.Insurance.IsActive
+                    } : null,
+                    Price = bs.Price,
+                    Quantity = bs.Quantity
                 }).ToList()
             };
         }
@@ -781,6 +1021,60 @@ namespace FlightBooking.Services
             await _context.SaveChangesAsync();
 
             return await GetUserByIdAsync(user.UserId);
+        }
+
+        public async Task<AdminUserResponseDto> UpdateUserAsync(int userId, UpdateUserDto updateDto)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+                throw new ArgumentException("User not found");
+
+            // Update username if provided and check for duplicates
+            if (!string.IsNullOrEmpty(updateDto.Username) && updateDto.Username != user.Username)
+            {
+                var existingUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Username == updateDto.Username && u.UserId != userId);
+                if (existingUser != null)
+                    throw new InvalidOperationException("Username already exists");
+                user.Username = updateDto.Username;
+            }
+
+            // Update email if provided and check for duplicates
+            if (!string.IsNullOrEmpty(updateDto.Email) && updateDto.Email != user.Email)
+            {
+                var existingUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == updateDto.Email && u.UserId != userId);
+                if (existingUser != null)
+                    throw new InvalidOperationException("Email already exists");
+                user.Email = updateDto.Email;
+            }
+
+            // Update password if provided
+            if (!string.IsNullOrEmpty(updateDto.Password))
+            {
+                user.Password = BCrypt.Net.BCrypt.HashPassword(updateDto.Password);
+            }
+
+            // Update other fields if provided
+            if (!string.IsNullOrEmpty(updateDto.FullName))
+                user.FullName = updateDto.FullName;
+
+            if (updateDto.Phone != null)
+                user.Phone = updateDto.Phone;
+
+            if (updateDto.DateOfBirth.HasValue)
+                user.DateOfBirth = updateDto.DateOfBirth.Value;
+
+            if (!string.IsNullOrEmpty(updateDto.Gender))
+                user.Gender = updateDto.Gender;
+
+            if (updateDto.IsActive.HasValue)
+                user.IsActive = updateDto.IsActive.Value;
+
+            user.UpdatedAt = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+            return await GetUserByIdAsync(userId);
         }
 
         public async Task<AdminUserResponseDto> UpdateUserStatusAsync(int userId, UpdateUserStatusDto statusDto)

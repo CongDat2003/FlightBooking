@@ -234,8 +234,17 @@ namespace FlightBooking.Services
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                // KHÔNG gửi email khi tạo booking - chỉ gửi khi thanh toán thành công
-                // Email confirmation sẽ được gửi trong PaymentService khi payment success
+                // Gửi email xác nhận đặt vé thành công
+                try
+                {
+                    await _notificationService.SendBookingConfirmationAsync(booking.BookingId);
+                }
+                catch (Exception ex)
+                {
+                    // Log lỗi nhưng không throw để không ảnh hưởng đến quá trình đặt vé
+                    // Email sẽ được gửi lại khi thanh toán thành công với thông tin đầy đủ hơn
+                    // Có thể log vào file hoặc database nếu cần
+                }
 
                 // Return booking details
                 return await GetBookingByIdAsync(booking.BookingId);

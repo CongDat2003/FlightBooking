@@ -41,6 +41,17 @@ namespace FlightBooking.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            // Gửi email xác nhận đăng ký thành công
+            try
+            {
+                await _emailService.SendRegistrationConfirmationEmailAsync(user.Email, user.FullName, user.Username);
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến quá trình đăng ký
+                // Có thể log vào file hoặc database nếu cần
+            }
+
             return new UserProfileDto
             {
                 UserId = user.UserId,

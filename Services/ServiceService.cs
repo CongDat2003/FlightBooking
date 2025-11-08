@@ -30,6 +30,7 @@ namespace FlightBooking.Services
                     Price = m.Price,
                     MealType = m.MealType,
                     ImageUrl = m.ImageUrl,
+                    ClassId = m.ClassId,
                     IsActive = m.IsActive
                 })
                 .ToListAsync();
@@ -48,36 +49,57 @@ namespace FlightBooking.Services
                 Price = meal.Price,
                 MealType = meal.MealType,
                 ImageUrl = meal.ImageUrl,
+                ClassId = meal.ClassId,
                 IsActive = meal.IsActive
             };
         }
 
         public async Task<MealDto> CreateMealAsync(CreateMealDto createDto)
         {
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(createDto.MealName))
+            {
+                throw new ArgumentException("Meal name is required.");
+            }
+
+            if (createDto.Price < 0)
+            {
+                throw new ArgumentException("Price cannot be negative.");
+            }
+
             var meal = new Meal
             {
-                MealName = createDto.MealName,
-                Description = createDto.Description,
+                MealName = createDto.MealName.Trim(),
+                Description = string.IsNullOrWhiteSpace(createDto.Description) ? null : createDto.Description.Trim(),
                 Price = createDto.Price,
-                MealType = createDto.MealType,
-                ImageUrl = createDto.ImageUrl,
-                IsActive = true,
-                CreatedAt = DateTime.Now
+                MealType = string.IsNullOrWhiteSpace(createDto.MealType) ? null : createDto.MealType.Trim(),
+                ImageUrl = string.IsNullOrWhiteSpace(createDto.ImageUrl) ? null : createDto.ImageUrl.Trim(),
+                IsActive = true
+                // CreatedAt will be set automatically by the model default value
             };
 
-            _context.Meals.Add(meal);
-            await _context.SaveChangesAsync();
-
-            return new MealDto
+            try
             {
-                MealId = meal.MealId,
-                MealName = meal.MealName,
-                Description = meal.Description,
-                Price = meal.Price,
-                MealType = meal.MealType,
-                ImageUrl = meal.ImageUrl,
-                IsActive = meal.IsActive
-            };
+                _context.Meals.Add(meal);
+                await _context.SaveChangesAsync();
+
+                return new MealDto
+                {
+                    MealId = meal.MealId,
+                    MealName = meal.MealName,
+                    Description = meal.Description,
+                    Price = meal.Price,
+                    MealType = meal.MealType,
+                    ImageUrl = meal.ImageUrl,
+                    ClassId = meal.ClassId,
+                    IsActive = meal.IsActive
+                };
+            }
+            catch (Exception ex)
+            {
+                // Log the full exception for debugging
+                throw new InvalidOperationException($"Failed to create meal: {ex.Message}", ex);
+            }
         }
 
         public async Task<bool> UpdateMealAsync(int mealId, UpdateMealDto updateDto)
@@ -215,7 +237,7 @@ namespace FlightBooking.Services
                     InsuranceName = i.InsuranceName,
                     Description = i.Description,
                     Price = i.Price,
-                    CoverageAmount = i.CoverageAmount,
+                    CoverageAmount = null,
                     InsuranceType = i.InsuranceType,
                     ImageUrl = i.ImageUrl,
                     IsActive = i.IsActive
@@ -234,7 +256,7 @@ namespace FlightBooking.Services
                 InsuranceName = insurance.InsuranceName,
                 Description = insurance.Description,
                 Price = insurance.Price,
-                CoverageAmount = insurance.CoverageAmount,
+                CoverageAmount = null,
                 InsuranceType = insurance.InsuranceType,
                 ImageUrl = insurance.ImageUrl,
                 IsActive = insurance.IsActive
@@ -248,7 +270,7 @@ namespace FlightBooking.Services
                 InsuranceName = createDto.InsuranceName,
                 Description = createDto.Description,
                 Price = createDto.Price,
-                CoverageAmount = createDto.CoverageAmount,
+                CoverageAmount = null,
                 InsuranceType = createDto.InsuranceType,
                 ImageUrl = createDto.ImageUrl,
                 IsActive = true,
@@ -264,7 +286,7 @@ namespace FlightBooking.Services
                 InsuranceName = insurance.InsuranceName,
                 Description = insurance.Description,
                 Price = insurance.Price,
-                CoverageAmount = insurance.CoverageAmount,
+                CoverageAmount = null,
                 InsuranceType = insurance.InsuranceType,
                 ImageUrl = insurance.ImageUrl,
                 IsActive = insurance.IsActive
@@ -279,7 +301,7 @@ namespace FlightBooking.Services
             if (updateDto.InsuranceName != null) insurance.InsuranceName = updateDto.InsuranceName;
             if (updateDto.Description != null) insurance.Description = updateDto.Description;
             if (updateDto.Price.HasValue) insurance.Price = updateDto.Price.Value;
-            if (updateDto.CoverageAmount.HasValue) insurance.CoverageAmount = updateDto.CoverageAmount.Value;
+            // CoverageAmount column does not exist in database, skipping
             if (updateDto.InsuranceType != null) insurance.InsuranceType = updateDto.InsuranceType;
             if (updateDto.ImageUrl != null) insurance.ImageUrl = updateDto.ImageUrl;
             if (updateDto.IsActive.HasValue) insurance.IsActive = updateDto.IsActive.Value;
@@ -321,6 +343,7 @@ namespace FlightBooking.Services
                         Price = bs.Meal.Price,
                         MealType = bs.Meal.MealType,
                         ImageUrl = bs.Meal.ImageUrl,
+                        ClassId = bs.Meal.ClassId,
                         IsActive = bs.Meal.IsActive
                     } : null,
                     Luggage = bs.Luggage != null ? new LuggageDto
@@ -340,7 +363,7 @@ namespace FlightBooking.Services
                         InsuranceName = bs.Insurance.InsuranceName,
                         Description = bs.Insurance.Description,
                         Price = bs.Insurance.Price,
-                        CoverageAmount = bs.Insurance.CoverageAmount,
+                        CoverageAmount = null,
                         InsuranceType = bs.Insurance.InsuranceType,
                         ImageUrl = bs.Insurance.ImageUrl,
                         IsActive = bs.Insurance.IsActive
@@ -426,6 +449,7 @@ namespace FlightBooking.Services
                     Price = meal.Price,
                     MealType = meal.MealType,
                     ImageUrl = meal.ImageUrl,
+                    ClassId = meal.ClassId,
                     IsActive = meal.IsActive
                 } : null,
                 Luggage = luggage != null ? new LuggageDto
@@ -445,7 +469,7 @@ namespace FlightBooking.Services
                     InsuranceName = insurance.InsuranceName,
                     Description = insurance.Description,
                     Price = insurance.Price,
-                    CoverageAmount = insurance.CoverageAmount,
+                    CoverageAmount = null,
                     InsuranceType = insurance.InsuranceType,
                     ImageUrl = insurance.ImageUrl,
                     IsActive = insurance.IsActive
@@ -479,5 +503,6 @@ namespace FlightBooking.Services
         }
     }
 }
+
 
 

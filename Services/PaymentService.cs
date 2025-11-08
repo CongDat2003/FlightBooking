@@ -209,16 +209,17 @@ namespace FlightBooking.Services
                 if (string.IsNullOrWhiteSpace(returnUrl))
                 {
                     _logger.LogWarning("ReturnUrl is empty in config, using default");
-                    returnUrl = "http://172.20.10.5:501/api/payment/vnpay-return";
+                    returnUrl = "http://192.168.10.9:501/api/payment/vnpay-return";
                 }
-                else if (returnUrl.Contains("localhost") || returnUrl.Contains("127.0.0.1") || returnUrl.Contains("192.168.1.7") || returnUrl.Contains("192.168.10.73") || returnUrl.Contains("192.168.10.9"))
+                else if (returnUrl.Contains("localhost") || returnUrl.Contains("127.0.0.1") || returnUrl.Contains("192.168.1.7") || returnUrl.Contains("192.168.10.73") || returnUrl.Contains("172.20.10.5") || returnUrl.Contains("172.20.10.3"))
                 {
                     _logger.LogWarning($"ReturnUrl contains old/localhost IP: {returnUrl}, replacing with new IP");
-                    returnUrl = returnUrl.Replace("localhost", "172.20.10.5")
-                                          .Replace("127.0.0.1", "172.20.10.5")
-                                          .Replace("192.168.1.7", "172.20.10.5")
-                                          .Replace("192.168.10.73", "172.20.10.5")
-                                          .Replace("192.168.10.9", "172.20.10.5");
+                    returnUrl = returnUrl.Replace("localhost", "192.168.10.9")
+                                          .Replace("127.0.0.1", "192.168.10.9")
+                                          .Replace("192.168.1.7", "192.168.10.9")
+                                          .Replace("192.168.10.73", "192.168.10.9")
+                                          .Replace("172.20.10.5", "192.168.10.9")
+                                          .Replace("172.20.10.3", "192.168.10.9");
                 }
                 
                 if (!returnUrl.StartsWith("http://") && !returnUrl.StartsWith("https://"))

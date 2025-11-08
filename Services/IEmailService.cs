@@ -7,5 +7,6 @@
         Task SendCancellationEmailAsync(Models.Booking booking);
         Task SendPaymentConfirmationEmailAsync(Models.Payment payment);
         Task SendPasswordResetOtpEmailAsync(string recipientEmail, string otpCode, string recipientName);
+        Task SendRegistrationConfirmationEmailAsync(string recipientEmail, string recipientName, string username);
     }
 }

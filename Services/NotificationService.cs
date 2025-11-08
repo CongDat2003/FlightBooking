@@ -168,6 +168,15 @@ namespace FlightBooking.Services
             var payment = await _context.Payments
                 .Include(p => p.Booking)
                     .ThenInclude(b => b.User)
+                .Include(p => p.Booking)
+                    .ThenInclude(b => b.Flight)
+                        .ThenInclude(f => f.Airline)
+                .Include(p => p.Booking)
+                    .ThenInclude(b => b.Flight)
+                        .ThenInclude(f => f.DepartureAirport)
+                .Include(p => p.Booking)
+                    .ThenInclude(b => b.Flight)
+                        .ThenInclude(f => f.ArrivalAirport)
                 .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
 
             if (payment == null) return;

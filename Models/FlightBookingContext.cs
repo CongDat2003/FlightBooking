@@ -37,6 +37,7 @@ public partial class FlightBookingContext : DbContext
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<Message> Messages { get; set; }
+    public DbSet<AIChatMessage> AIChatMessages { get; set; }
     public DbSet<Meal> Meals { get; set; }
     public DbSet<Luggage> Luggages { get; set; }
     public DbSet<Insurance> Insurances { get; set; }
@@ -44,7 +45,7 @@ public partial class FlightBookingContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("server=(local); database=FlightBooking; uid=sa; pwd=123; Trusted_Connection=True; Encrypt=False");
+        => optionsBuilder.UseSqlServer("server=(local); database=FlightBooking; uid=sa; pwd=123456456; Trusted_Connection=True; Encrypt=False");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -399,16 +400,34 @@ public partial class FlightBookingContext : DbContext
         modelBuilder.Entity<Message>()
             .HasIndex(m => m.SenderType);
 
+        // AI Chat Message configurations
+        modelBuilder.Entity<AIChatMessage>(entity =>
+        {
+            entity.ToTable("AIChatMessages");
+            entity.HasKey(e => e.MessageId);
+            entity.Property(e => e.MessageId).HasColumnName("message_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.UserMessage).HasMaxLength(2000).HasColumnName("user_message");
+            entity.Property(e => e.AIResponse).HasColumnType("NVARCHAR(MAX)").HasColumnName("ai_response");
+            entity.Property(e => e.SessionId).HasMaxLength(100).HasColumnName("session_id");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         // Meal configurations
         modelBuilder.Entity<Meal>(entity =>
         {
             entity.ToTable("meals");
             entity.Property(e => e.MealId).HasColumnName("meal_id");
-            entity.Property(e => e.MealName).HasMaxLength(100).HasColumnName("meal_name");
+            entity.Property(e => e.MealName).HasMaxLength(100).HasColumnName("name");
             entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
             entity.Property(e => e.Price).HasColumnType("decimal(10,2)").HasColumnName("price");
-            entity.Property(e => e.MealType).HasMaxLength(50).HasColumnName("meal_type");
-            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_url");
+            entity.Property(e => e.MealType).HasMaxLength(50).HasColumnName("type");
+            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_resource");
+            entity.Property(e => e.ClassId).HasColumnName("class_id");
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
@@ -419,12 +438,12 @@ public partial class FlightBookingContext : DbContext
         {
             entity.ToTable("luggage");
             entity.Property(e => e.LuggageId).HasColumnName("luggage_id");
-            entity.Property(e => e.LuggageName).HasMaxLength(100).HasColumnName("luggage_name");
+            entity.Property(e => e.LuggageName).HasMaxLength(100).HasColumnName("name");
             entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
             entity.Property(e => e.Price).HasColumnType("decimal(10,2)").HasColumnName("price");
-            entity.Property(e => e.WeightLimit).HasColumnType("decimal(5,2)").HasColumnName("weight_limit");
-            entity.Property(e => e.LuggageType).HasMaxLength(50).HasColumnName("luggage_type");
-            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_url");
+            entity.Property(e => e.WeightLimit).HasColumnName("weight");
+            entity.Property(e => e.LuggageType).HasMaxLength(50).HasColumnName("conditions");
+            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_resource");
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
@@ -435,12 +454,13 @@ public partial class FlightBookingContext : DbContext
         {
             entity.ToTable("insurance");
             entity.Property(e => e.InsuranceId).HasColumnName("insurance_id");
-            entity.Property(e => e.InsuranceName).HasMaxLength(100).HasColumnName("insurance_name");
+            entity.Property(e => e.InsuranceName).HasMaxLength(100).HasColumnName("name");
             entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
             entity.Property(e => e.Price).HasColumnType("decimal(10,2)").HasColumnName("price");
-            entity.Property(e => e.CoverageAmount).HasColumnType("decimal(10,2)").HasColumnName("coverage_amount");
-            entity.Property(e => e.InsuranceType).HasMaxLength(50).HasColumnName("insurance_type");
-            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_url");
+            // CoverageAmount column does not exist in database, ignoring mapping
+            entity.Ignore(e => e.CoverageAmount);
+            entity.Property(e => e.InsuranceType).HasMaxLength(50).HasColumnName("type");
+            entity.Property(e => e.ImageUrl).HasMaxLength(255).HasColumnName("image_resource");
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())").HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");

@@ -26,9 +26,11 @@ public partial class Meal
     [StringLength(255)]
     public string? ImageUrl { get; set; }
 
+    public int? ClassId { get; set; } // Nullable - null means available for all classes
+
     public bool IsActive { get; set; } = true;
 
-    public DateTime? CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 }
