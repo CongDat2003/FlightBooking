@@ -13,17 +13,20 @@ namespace FlightBooking.Controllers
     public class PaymentCallbackController : ControllerBase
     {
         private readonly IPaymentService _paymentService;
+        private readonly INotificationService _notificationService;
         private readonly IOptions<VNPayConfig> _vnpayConfig;
         private readonly IOptions<ZaloPayConfig> _zalopayConfig; 
         private readonly ILogger<PaymentCallbackController> _logger; 
 
         public PaymentCallbackController(
             IPaymentService paymentService,
+            INotificationService notificationService,
             IOptions<VNPayConfig> vnpayConfig,
             IOptions<ZaloPayConfig> zalopayConfig, 
             ILogger<PaymentCallbackController> logger) 
         {
             _paymentService = paymentService;
+            _notificationService = notificationService;
             _vnpayConfig = vnpayConfig;
             _zalopayConfig = zalopayConfig; 
             _logger = logger; 
@@ -103,7 +106,22 @@ namespace FlightBooking.Controllers
                             AdditionalData = Request.Query.ToDictionary(x => x.Key, x => x.Value.ToString())
                         };
 
-                        await _paymentService.ProcessCallbackAsync(callbackDto);
+                        var paymentResponse = await _paymentService.ProcessCallbackAsync(callbackDto);
+                        
+                        // Gửi email xác nhận thanh toán thành công
+                        if (paymentResponse != null && paymentResponse.Status == "SUCCESS")
+                        {
+                            try
+                            {
+                                await _notificationService.SendPaymentConfirmationAsync(paymentResponse.PaymentId);
+                                _logger.LogInformation($"Payment confirmation email sent for PaymentId: {paymentResponse.PaymentId}");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, $"Failed to send payment confirmation email for PaymentId: {paymentResponse.PaymentId}");
+                                // Không throw exception để không ảnh hưởng đến response
+                            }
+                        }
 
                         return Ok(new
                         {
@@ -211,7 +229,22 @@ namespace FlightBooking.Controllers
                         }
                     };
 
-                    await _paymentService.ProcessCallbackAsync(callbackDto);
+                    var paymentResponse = await _paymentService.ProcessCallbackAsync(callbackDto);
+                    
+                    // Gửi email xác nhận thanh toán thành công
+                    if (paymentResponse != null && paymentResponse.Status == "SUCCESS")
+                    {
+                        try
+                        {
+                            await _notificationService.SendPaymentConfirmationAsync(paymentResponse.PaymentId);
+                            _logger.LogInformation($"Payment confirmation email sent for PaymentId: {paymentResponse.PaymentId}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"Failed to send payment confirmation email for PaymentId: {paymentResponse.PaymentId}");
+                            // Không throw exception để không ảnh hưởng đến response
+                        }
+                    }
 
                     return Ok(new { return_code = 1, return_message = "success" });
                 }

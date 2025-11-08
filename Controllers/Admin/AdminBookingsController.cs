@@ -1,18 +1,41 @@
-﻿using FlightBooking.DTOs.Admin;
+﻿using FlightBooking.DTOs;
+using FlightBooking.DTOs.Admin;
 using FlightBooking.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlightBooking.Controllers.Admin
 {
     [ApiController]
-    [Route("api/admin/[controller]")]
-    public class BookingsController : ControllerBase
+    [Route("api/admin/Bookings")]
+    public class AdminBookingsController : ControllerBase
     {
         private readonly IAdminService _adminService;
 
-        public BookingsController(IAdminService adminService)
+        public AdminBookingsController(IAdminService adminService)
         {
             _adminService = adminService;
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<AdminBookingResponseDto>> CreateBooking([FromBody] CreateBookingDto bookingDto)
+        {
+            try
+            {
+                var booking = await _adminService.CreateBookingAsync(bookingDto);
+                return CreatedAtAction(nameof(GetBookingById), new { bookingId = booking.BookingId }, booking);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpGet]

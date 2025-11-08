@@ -66,6 +66,28 @@ namespace FlightBooking.Controllers.Admin
             }
         }
 
+        [HttpPut("{userId}")]
+        public async Task<ActionResult<AdminUserResponseDto>> UpdateUser(int userId, [FromBody] UpdateUserDto updateDto)
+        {
+            try
+            {
+                var user = await _adminService.UpdateUserAsync(userId, updateDto);
+                return Ok(user);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPut("{userId}/status")]
         public async Task<ActionResult<AdminUserResponseDto>> UpdateUserStatus(int userId, [FromBody] UpdateUserStatusDto statusDto)
         {

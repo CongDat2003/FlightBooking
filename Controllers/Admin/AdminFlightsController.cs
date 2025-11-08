@@ -100,13 +100,18 @@ namespace FlightBooking.Controllers.Admin
         }
 
         [HttpPost("{flightId}/generate-seats")]
-        public async Task<ActionResult> GenerateSeats(int flightId)
+        public async Task<ActionResult> GenerateSeats(int flightId, [FromQuery] bool forceRegenerate = false)
         {
             try
             {
-                var result = await _adminService.GenerateSeatsForFlightAsync(flightId);
+                var result = await _adminService.GenerateSeatsForFlightAsync(flightId, forceRegenerate);
                 if (result)
-                    return Ok(new { message = "Seats generated successfully" });
+                {
+                    string message = forceRegenerate 
+                        ? "Seats regenerated successfully" 
+                        : "Seats generated successfully";
+                    return Ok(new { message = message });
+                }
                 return NotFound(new { message = "Flight not found" });
             }
             catch (Exception ex)

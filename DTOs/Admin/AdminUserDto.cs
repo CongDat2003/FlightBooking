@@ -1,4 +1,6 @@
-﻿namespace FlightBooking.DTOs.Admin
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace FlightBooking.DTOs.Admin
 {
     public class AdminUserResponseDto
     {
@@ -19,5 +21,31 @@
     public class UpdateUserStatusDto
     {
         public bool IsActive { get; set; }
+    }
+
+    public class UpdateUserDto
+    {
+        [StringLength(50)]
+        public string? Username { get; set; }
+
+        [EmailAddress]
+        [StringLength(100)]
+        public string? Email { get; set; }
+
+        [StringLength(255)]
+        public string? Password { get; set; }
+
+        [StringLength(100)]
+        public string? FullName { get; set; }
+
+        [StringLength(20)]
+        public string? Phone { get; set; }
+
+        public DateOnly? DateOfBirth { get; set; }
+
+        [StringLength(10)]
+        public string? Gender { get; set; }
+
+        public bool? IsActive { get; set; }
     }
 }

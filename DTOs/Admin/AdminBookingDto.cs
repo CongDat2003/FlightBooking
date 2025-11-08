@@ -1,4 +1,6 @@
-﻿namespace FlightBooking.DTOs.Admin
+﻿using FlightBooking.DTOs;
+
+namespace FlightBooking.DTOs.Admin
 {
     public class AdminBookingResponseDto
     {
@@ -15,6 +17,7 @@
         public DateTime BookingDate { get; set; }
         public int PassengerCount { get; set; }
         public List<AdminBookingSeatDto> Seats { get; set; } = new List<AdminBookingSeatDto>();
+        public List<BookingServiceDto> Services { get; set; } = new List<BookingServiceDto>();
     }
 
     public class AdminBookingSeatDto
