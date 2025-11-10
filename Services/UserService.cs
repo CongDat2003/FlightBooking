@@ -165,6 +165,12 @@ namespace FlightBooking.Services
                 .Include(b => b.Flight.DepartureAirport)
                 .Include(b => b.Flight.ArrivalAirport)
                 .Include(b => b.BookingSeats)
+                .Include(b => b.BookingServices)
+                    .ThenInclude(bs => bs.Meal)
+                .Include(b => b.BookingServices)
+                    .ThenInclude(bs => bs.Luggage)
+                .Include(b => b.BookingServices)
+                    .ThenInclude(bs => bs.Insurance)
                 .Where(b => b.UserId == userId)
                 .OrderByDescending(b => b.BookingDate)
                 .Skip((page - 1) * pageSize)
@@ -185,7 +191,48 @@ namespace FlightBooking.Services
                 TotalAmount = b.TotalAmount,
                 BookingDate = b.BookingDate ?? DateTime.Now,
                 PassengerCount = b.BookingSeats.Count,
-                CanCancel = b.BookingStatus == "CONFIRMED" && b.Flight.DepartureTime > DateTime.Now.AddHours(24)
+                CanCancel = b.BookingStatus == "CONFIRMED" && b.Flight.DepartureTime > DateTime.Now.AddHours(24),
+                Services = b.BookingServices.Select(bs => new DTOs.BookingServiceDto
+                {
+                    BookingServiceId = bs.BookingServiceId,
+                    BookingId = bs.BookingId,
+                    ServiceType = bs.ServiceType,
+                    Meal = bs.Meal != null ? new DTOs.MealDto
+                    {
+                        MealId = bs.Meal.MealId,
+                        MealName = bs.Meal.MealName,
+                        Description = bs.Meal.Description,
+                        Price = bs.Meal.Price,
+                        MealType = bs.Meal.MealType,
+                        ImageUrl = bs.Meal.ImageUrl,
+                        ClassId = bs.Meal.ClassId,
+                        IsActive = bs.Meal.IsActive
+                    } : null,
+                    Luggage = bs.Luggage != null ? new DTOs.LuggageDto
+                    {
+                        LuggageId = bs.Luggage.LuggageId,
+                        LuggageName = bs.Luggage.LuggageName,
+                        Description = bs.Luggage.Description,
+                        Price = bs.Luggage.Price,
+                        WeightLimit = bs.Luggage.WeightLimit,
+                        LuggageType = bs.Luggage.LuggageType,
+                        ImageUrl = bs.Luggage.ImageUrl,
+                        IsActive = bs.Luggage.IsActive
+                    } : null,
+                    Insurance = bs.Insurance != null ? new DTOs.InsuranceDto
+                    {
+                        InsuranceId = bs.Insurance.InsuranceId,
+                        InsuranceName = bs.Insurance.InsuranceName,
+                        Description = bs.Insurance.Description,
+                        Price = bs.Insurance.Price,
+                        CoverageAmount = bs.Insurance.CoverageAmount,
+                        InsuranceType = bs.Insurance.InsuranceType,
+                        ImageUrl = bs.Insurance.ImageUrl,
+                        IsActive = bs.Insurance.IsActive
+                    } : null,
+                    Price = bs.Price,
+                    Quantity = bs.Quantity
+                }).ToList()
             }).ToList();
         }
 

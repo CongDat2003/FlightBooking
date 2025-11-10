@@ -1,4 +1,6 @@
-﻿namespace FlightBooking.DTOs.User
+﻿using FlightBooking.DTOs;
+
+namespace FlightBooking.DTOs.User
 {
     public class UserBookingHistoryDto
     {
@@ -15,6 +17,7 @@
         public DateTime BookingDate { get; set; }
         public int PassengerCount { get; set; }
         public bool CanCancel { get; set; }
+        public List<BookingServiceDto> Services { get; set; } = new List<BookingServiceDto>();
     }
 
     public class BookingDetailDto

@@ -23,17 +23,17 @@ namespace FlightBooking.Services
             _logger = logger;
         }
 
-        public async Task<string> GetAIResponseAsync(string userMessage, int? userId = null, List<(string UserMessage, string AIResponse)>? chatHistory = null)
+        public async Task<string> GetAIResponseAsync(string userMessage, int? userId = null, List<(string UserMessage, string AIResponse)>? chatHistory = null, bool isAdmin = false)
         {
             try
             {
-                _logger.LogInformation("Getting AI response for message: {Message}, UserId: {UserId}", userMessage, userId);
+                _logger.LogInformation("Getting AI response for message: {Message}, UserId: {UserId}, IsAdmin: {IsAdmin}", userMessage, userId, isAdmin);
 
-                // Lấy context từ database
-                var databaseContext = await GetDatabaseContextAsync(userId);
+                // Lấy context từ database (khác nhau cho admin và customer)
+                var databaseContext = await GetDatabaseContextAsync(userId, isAdmin);
 
-                // Tạo prompt với context
-                var prompt = BuildPrompt(userMessage, databaseContext, chatHistory);
+                // Tạo prompt với context (khác nhau cho admin và customer)
+                var prompt = BuildPrompt(userMessage, databaseContext, chatHistory, isAdmin);
                 _logger.LogDebug("Prompt built. Prompt length: {Length} characters", prompt.Length);
 
                 // Gọi Gemini API qua REST
@@ -50,7 +50,7 @@ namespace FlightBooking.Services
             }
         }
 
-        private async Task<string> GetDatabaseContextAsync(int? userId)
+        private async Task<string> GetDatabaseContextAsync(int? userId, bool isAdmin = false)
         {
             var contextParts = new List<string>();
 
@@ -58,14 +58,14 @@ namespace FlightBooking.Services
             {
                 _logger.LogInformation("Starting to fetch database context for AI. UserId: {UserId}", userId);
 
-                // Lấy thông tin chuyến bay
+                // Lấy thông tin chuyến bay (tăng số lượng để có nhiều lựa chọn hơn)
                 var flights = await _context.Flights
                     .Include(f => f.Airline)
                     .Include(f => f.DepartureAirport)
                     .Include(f => f.ArrivalAirport)
-                    .Where(f => f.DepartureTime >= DateTime.Now)
+                    .Where(f => f.DepartureTime >= DateTime.Now && f.Status != "CANCELLED")
                     .OrderBy(f => f.DepartureTime)
-                    .Take(20)
+                    .Take(30)
                     .ToListAsync();
 
                 _logger.LogInformation("Fetched {Count} flights from database", flights.Count);
@@ -73,14 +73,19 @@ namespace FlightBooking.Services
                 if (flights.Any())
                 {
                     contextParts.Add("=== THÔNG TIN CHUYẾN BAY CÓ SẴN ===");
+                    contextParts.Add("(Sắp xếp theo thời gian khởi hành sớm nhất)");
                     foreach (var flight in flights)
                     {
+                        var duration = flight.ArrivalTime - flight.DepartureTime;
+                        var durationStr = $"{(int)duration.TotalHours}h{duration.Minutes}m";
                         contextParts.Add($"- Chuyến bay {flight.FlightNumber} ({flight.Airline?.AirlineName}): " +
                             $"{flight.DepartureAirport?.AirportName} ({flight.DepartureAirport?.AirportCode}) → " +
                             $"{flight.ArrivalAirport?.AirportName} ({flight.ArrivalAirport?.AirportCode}), " +
                             $"Khởi hành: {flight.DepartureTime:dd/MM/yyyy HH:mm}, " +
                             $"Đến: {flight.ArrivalTime:dd/MM/yyyy HH:mm}, " +
-                            $"Giá: {flight.BasePrice:N0} VNĐ");
+                            $"Thời gian bay: {durationStr}, " +
+                            $"Giá cơ bản: {flight.BasePrice:N0} VNĐ, " +
+                            $"Trạng thái: {flight.Status}");
                     }
                 }
 
@@ -148,37 +153,79 @@ namespace FlightBooking.Services
                     }
                 }
 
-                // Lấy thông tin dịch vụ
-                var meals = await _context.Meals.Take(10).ToListAsync();
+                // Lấy thông tin dịch vụ (mở rộng cho cả admin và customer)
+                var meals = await _context.Meals.Take(20).ToListAsync();
                 _logger.LogInformation("Fetched {Count} meals from database", meals.Count);
                 if (meals.Any())
                 {
-                    contextParts.Add("\n=== DỊCH VỤ BỮA ĂN ===");
+                    contextParts.Add("\n=== DỊCH VỤ BỮA ĂN & ĐỒ UỐNG ===");
                     foreach (var meal in meals)
                     {
-                        contextParts.Add($"- {meal.MealName}: {meal.Price:N0} VNĐ");
+                        var mealType = !string.IsNullOrEmpty(meal.MealType) ? $" ({meal.MealType})" : "";
+                        var classInfo = meal.ClassId.HasValue ? $" [Hạng: {GetSeatClassName(meal.ClassId.Value)}]" : "";
+                        contextParts.Add($"- {meal.MealName}{mealType}{classInfo}: {meal.Price:N0} VNĐ");
                     }
                 }
 
-                var luggages = await _context.Luggages.Take(10).ToListAsync();
+                var luggages = await _context.Luggages.Take(15).ToListAsync();
                 _logger.LogInformation("Fetched {Count} luggages from database", luggages.Count);
                 if (luggages.Any())
                 {
                     contextParts.Add("\n=== DỊCH VỤ HÀNH LÝ ===");
                     foreach (var luggage in luggages)
                     {
-                        contextParts.Add($"- {luggage.LuggageType}: {luggage.Price:N0} VNĐ");
+                        var weightInfo = luggage.WeightLimit > 0 ? $" - {luggage.WeightLimit}kg" : "";
+                        contextParts.Add($"- {luggage.LuggageName} ({luggage.LuggageType}){weightInfo}: {luggage.Price:N0} VNĐ");
                     }
                 }
 
-                var insurances = await _context.Insurances.Take(10).ToListAsync();
+                var insurances = await _context.Insurances.Take(15).ToListAsync();
                 _logger.LogInformation("Fetched {Count} insurances from database", insurances.Count);
                 if (insurances.Any())
                 {
                     contextParts.Add("\n=== DỊCH VỤ BẢO HIỂM ===");
                     foreach (var insurance in insurances)
                     {
-                        contextParts.Add($"- {insurance.InsuranceName}: {insurance.Price:N0} VNĐ");
+                        var typeInfo = !string.IsNullOrEmpty(insurance.InsuranceType) ? $" ({insurance.InsuranceType})" : "";
+                        contextParts.Add($"- {insurance.InsuranceName}{typeInfo}: {insurance.Price:N0} VNĐ");
+                    }
+                }
+
+                // Thêm thông tin cho admin
+                if (isAdmin)
+                {
+                    // Thống kê tổng quan cho admin
+                    var totalBookings = await _context.Bookings.CountAsync();
+                    var totalUsers = await _context.Users.Where(u => u.Role == "Customer").CountAsync();
+                    var totalFlights = await _context.Flights.CountAsync();
+                    var pendingBookings = await _context.Bookings.Where(b => b.BookingStatus == "PENDING").CountAsync();
+                    var confirmedBookings = await _context.Bookings.Where(b => b.BookingStatus == "CONFIRMED").CountAsync();
+                    
+                    contextParts.Add("\n=== THỐNG KÊ HỆ THỐNG (CHO ADMIN) ===");
+                    contextParts.Add($"- Tổng số đặt chỗ: {totalBookings}");
+                    contextParts.Add($"- Tổng số khách hàng: {totalUsers}");
+                    contextParts.Add($"- Tổng số chuyến bay: {totalFlights}");
+                    contextParts.Add($"- Đặt chỗ đang chờ: {pendingBookings}");
+                    contextParts.Add($"- Đặt chỗ đã xác nhận: {confirmedBookings}");
+                    
+                    // Thông tin đặt chỗ gần đây cho admin
+                    var recentBookings = await _context.Bookings
+                        .Include(b => b.Flight)
+                        .OrderByDescending(b => b.BookingDate)
+                        .Take(10)
+                        .ToListAsync();
+                    
+                    if (recentBookings.Any())
+                    {
+                        contextParts.Add("\n=== ĐẶT CHỖ GẦN ĐÂY (CHO ADMIN) ===");
+                        foreach (var booking in recentBookings)
+                        {
+                            contextParts.Add($"- Mã: {booking.BookingReference}, " +
+                                $"Chuyến bay: {booking.Flight?.FlightNumber}, " +
+                                $"Trạng thái: {booking.BookingStatus}, " +
+                                $"Thanh toán: {booking.PaymentStatus}, " +
+                                $"Tổng: {booking.TotalAmount:N0} VNĐ");
+                        }
                     }
                 }
 
@@ -195,14 +242,62 @@ namespace FlightBooking.Services
             return string.Join("\n", contextParts);
         }
 
-        private string BuildPrompt(string userMessage, string databaseContext, List<(string UserMessage, string AIResponse)>? chatHistory)
+        private string GetSeatClassName(int classId)
         {
-            var systemPrompt = @"Bạn là trợ lý AI thông minh của hệ thống đặt vé máy bay. Nhiệm vụ của bạn là:
-1. Trả lời các câu hỏi về chuyến bay, đặt chỗ, thanh toán một cách chính xác và thân thiện
-2. Sử dụng thông tin từ database được cung cấp để trả lời
-3. Nếu không có thông tin trong database, hãy nói rõ và hướng dẫn khách hàng liên hệ admin
-4. Trả lời bằng tiếng Việt, ngắn gọn, dễ hiểu
-5. Luôn lịch sự và chuyên nghiệp
+            return classId switch
+            {
+                1 => "Hạng Phổ Thông",
+                2 => "Hạng Thương Gia",
+                3 => "Hạng Nhất",
+                _ => "Không xác định"
+            };
+        }
+
+        private string BuildPrompt(string userMessage, string databaseContext, List<(string UserMessage, string AIResponse)>? chatHistory, bool isAdmin = false)
+        {
+            var systemPrompt = isAdmin 
+                ? BuildAdminPrompt(userMessage, databaseContext, chatHistory)
+                : BuildCustomerPrompt(userMessage, databaseContext, chatHistory);
+            
+            return systemPrompt;
+        }
+
+        private string BuildCustomerPrompt(string userMessage, string databaseContext, List<(string UserMessage, string AIResponse)>? chatHistory)
+        {
+            var systemPrompt = @"Bạn là trợ lý AI thông minh và thân thiện của hệ thống đặt vé máy bay. Nhiệm vụ của bạn là hỗ trợ KHÁCH HÀNG:
+
+1. TRẢ LỜI CÁC CÂU HỎI VỀ:
+   - Tìm kiếm và đặt chuyến bay (điểm đi, điểm đến, ngày giờ, giá cả, hạng ghế)
+   - Thông tin về các hãng hàng không, sân bay, thời gian bay
+   - Dịch vụ bổ sung:
+     * Bữa ăn & Đồ uống: các loại món ăn, đồ uống, giá cả, hạng ghế tương ứng
+     * Hành lý: trọng lượng, loại hành lý, giá cả
+     * Bảo hiểm: các gói bảo hiểm, mức độ bảo vệ, giá cả
+   - Thanh toán: các phương thức thanh toán (VNPay, MoMo, ZaloPay, QR Code)
+   - Trạng thái đặt chỗ, hủy vé, đổi vé, hoàn tiền
+   - Hướng dẫn sử dụng hệ thống, cách đặt vé, cách thanh toán
+   - Câu hỏi về chính sách: chính sách hủy vé, đổi vé, hoàn tiền
+   - Câu hỏi về dịch vụ: dịch vụ miễn phí, dịch vụ trả phí, combo dịch vụ
+
+2. PHONG CÁCH TRẢ LỜI:
+   - Luôn lịch sự, thân thiện và chuyên nghiệp
+   - Trả lời bằng tiếng Việt, ngắn gọn nhưng đầy đủ thông tin
+   - Sử dụng ngôn ngữ tự nhiên, dễ hiểu
+   - Nếu có thể, đưa ra nhiều lựa chọn cho khách hàng
+   - Hỏi thêm thông tin nếu cần thiết để hỗ trợ tốt hơn
+   - Đưa ra gợi ý hữu ích dựa trên nhu cầu
+
+3. XỬ LÝ THÔNG TIN:
+   - Ưu tiên sử dụng thông tin từ database được cung cấp
+   - Nếu không có thông tin trong database, hãy nói rõ và hướng dẫn khách hàng cách tìm kiếm hoặc liên hệ hỗ trợ
+   - Đề xuất các chuyến bay phù hợp dựa trên yêu cầu
+   - So sánh giá cả và dịch vụ khi có nhiều lựa chọn
+   - Giải thích rõ về các hạng ghế (Phổ Thông, Thương Gia, Nhất) và dịch vụ đi kèm
+
+4. TƯƠNG TÁC:
+   - Nhớ thông tin từ các câu hỏi trước trong cuộc trò chuyện
+   - Đưa ra gợi ý hữu ích dựa trên ngữ cảnh
+   - Hỏi lại để làm rõ nếu câu hỏi không rõ ràng
 
 THÔNG TIN TỪ DATABASE:
 " + databaseContext + @"
@@ -211,15 +306,67 @@ LỊCH SỬ TRÒ CHUYỆN:";
 
             if (chatHistory != null && chatHistory.Any())
             {
+                systemPrompt += "\n\nCác câu hỏi và trả lời trước đó:";
                 foreach (var (userMsg, aiResp) in chatHistory.TakeLast(5))
                 {
-                    systemPrompt += $"\nKhách hàng: {userMsg}";
+                    systemPrompt += $"\n\nKhách hàng: {userMsg}";
                     systemPrompt += $"\nAI: {aiResp}";
                 }
             }
 
             systemPrompt += $"\n\nCÂU HỎI HIỆN TẠI CỦA KHÁCH HÀNG: {userMessage}";
-            systemPrompt += "\n\nHãy trả lời câu hỏi của khách hàng dựa trên thông tin từ database và lịch sử trò chuyện:";
+            systemPrompt += "\n\nHãy trả lời câu hỏi của khách hàng một cách thân thiện, chi tiết và hữu ích. Nếu cần thêm thông tin, hãy hỏi lại một cách lịch sự. Sử dụng thông tin từ database và lịch sử trò chuyện để đưa ra câu trả lời chính xác nhất.";
+
+            return systemPrompt;
+        }
+
+        private string BuildAdminPrompt(string userMessage, string databaseContext, List<(string UserMessage, string AIResponse)>? chatHistory)
+        {
+            var systemPrompt = @"Bạn là trợ lý AI thông minh và chuyên nghiệp của hệ thống quản lý đặt vé máy bay. Nhiệm vụ của bạn là hỗ trợ ADMIN trong việc quản lý hệ thống:
+
+1. TRẢ LỜI CÁC CÂU HỎI VỀ QUẢN LÝ HỆ THỐNG:
+   - Quản lý chuyến bay: tạo, sửa, xóa chuyến bay, quản lý ghế, trạng thái chuyến bay
+   - Quản lý đặt chỗ: xem danh sách đặt chỗ, cập nhật trạng thái, xác nhận/hủy đặt chỗ
+   - Quản lý khách hàng: xem danh sách khách hàng, thông tin khách hàng, lịch sử đặt chỗ
+   - Quản lý dịch vụ: quản lý bữa ăn, hành lý, bảo hiểm, giá cả
+   - Thống kê và báo cáo: số lượng đặt chỗ, doanh thu, chuyến bay phổ biến
+   - Xử lý sự cố: chuyến bay bị hoãn, hủy, thay đổi lịch trình
+   - Quản lý thanh toán: theo dõi trạng thái thanh toán, hoàn tiền
+
+2. PHONG CÁCH TRẢ LỜI:
+   - Chuyên nghiệp, chính xác và rõ ràng
+   - Trả lời bằng tiếng Việt, ngắn gọn nhưng đầy đủ thông tin
+   - Đưa ra hướng dẫn cụ thể về các thao tác quản lý
+   - Gợi ý các bước xử lý khi có vấn đề
+
+3. XỬ LÝ THÔNG TIN:
+   - Ưu tiên sử dụng thông tin từ database được cung cấp
+   - Đưa ra thống kê và phân tích dựa trên dữ liệu
+   - Gợi ý các hành động quản lý phù hợp
+   - Cảnh báo về các vấn đề cần chú ý (ví dụ: đặt chỗ đang chờ xử lý)
+
+4. TƯƠNG TÁC:
+   - Nhớ thông tin từ các câu hỏi trước trong cuộc trò chuyện
+   - Đưa ra gợi ý quản lý dựa trên ngữ cảnh
+   - Hỏi lại để làm rõ nếu câu hỏi không rõ ràng
+
+THÔNG TIN TỪ DATABASE:
+" + databaseContext + @"
+
+LỊCH SỬ TRÒ CHUYỆN:";
+
+            if (chatHistory != null && chatHistory.Any())
+            {
+                systemPrompt += "\n\nCác câu hỏi và trả lời trước đó:";
+                foreach (var (userMsg, aiResp) in chatHistory.TakeLast(5))
+                {
+                    systemPrompt += $"\n\nAdmin: {userMsg}";
+                    systemPrompt += $"\nAI: {aiResp}";
+                }
+            }
+
+            systemPrompt += $"\n\nCÂU HỎI HIỆN TẠI CỦA ADMIN: {userMessage}";
+            systemPrompt += "\n\nHãy trả lời câu hỏi của admin một cách chuyên nghiệp, chi tiết và hữu ích. Đưa ra hướng dẫn cụ thể về các thao tác quản lý. Sử dụng thông tin từ database và lịch sử trò chuyện để đưa ra câu trả lời chính xác nhất.";
 
             return systemPrompt;
         }

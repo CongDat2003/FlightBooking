@@ -104,6 +104,9 @@ namespace FlightBooking.Services
 
                     // 7. Handle cancelled flights
                     await HandleCancelledFlights(context, notificationService, stoppingToken);
+
+                    // 8. Update bookings to COMPLETED status (when departure time reached and payment is PAID)
+                    await UpdateCompletedBookings(context, notificationService, now, stoppingToken);
                 }
                 catch (Exception ex)
                 {
@@ -238,6 +241,32 @@ namespace FlightBooking.Services
             if (cancelledFlights.Any())
             {
                 _logger.LogInformation($"Processed {cancelledFlights.Count} cancelled flights");
+            }
+        }
+
+        private async Task UpdateCompletedBookings(FlightBookingContext context, INotificationService notificationService, DateTime now, CancellationToken stoppingToken)
+        {
+            // Find bookings that should be marked as COMPLETED:
+            // - PaymentStatus = "PAID"
+            // - BookingStatus = "CONFIRMED"
+            // - Flight.DepartureTime <= now (đã đến ngày đi)
+            var completedBookings = await context.Bookings
+                .Include(b => b.Flight)
+                .Where(b => b.PaymentStatus == "PAID" &&
+                           b.BookingStatus == "CONFIRMED" &&
+                           b.Flight.DepartureTime <= now)
+                .ToListAsync(stoppingToken);
+
+            if (completedBookings.Any())
+            {
+                foreach (var booking in completedBookings)
+                {
+                    booking.BookingStatus = "COMPLETED";
+                    _logger.LogInformation($"Updated booking {booking.BookingReference} to COMPLETED status (Flight {booking.Flight.FlightNumber} departed)");
+                }
+
+                await context.SaveChangesAsync(stoppingToken);
+                _logger.LogInformation($"Updated {completedBookings.Count} bookings to COMPLETED status");
             }
         }
     }

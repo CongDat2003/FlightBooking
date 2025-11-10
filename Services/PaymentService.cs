@@ -37,15 +37,39 @@ namespace FlightBooking.Services
             _logger.LogInformation($"=== CreatePaymentAsync START ===");
             _logger.LogInformation($"BookingId: {paymentDto.BookingId}, PaymentMethod: {paymentDto.PaymentMethod}");
             
-            var booking = await _context.Bookings.FindAsync(paymentDto.BookingId);
+            // Reload booking from database with seats and services to ensure we have the latest TotalAmount
+            var booking = await _context.Bookings
+                .Include(b => b.BookingSeats)
+                .Include(b => b.BookingServices)
+                .FirstOrDefaultAsync(b => b.BookingId == paymentDto.BookingId);
+            
             if (booking == null)
             {
                 _logger.LogError($"Booking not found: {paymentDto.BookingId}");
                 throw new ArgumentException("Booking not found");
             }
 
+            // Recalculate TotalAmount to ensure it includes all services
+            // Calculate base amount from seats
+            decimal seatsTotal = booking.BookingSeats?.Sum(bs => bs.SeatPrice) ?? 0;
+            
+            // Calculate services total
+            decimal servicesTotal = booking.BookingServices?.Sum(bs => bs.Price * bs.Quantity) ?? 0;
+            
+            // Total should be seats + services
+            decimal expectedTotal = seatsTotal + servicesTotal;
+            
+            // Update TotalAmount if it doesn't match
+            if (booking.TotalAmount != expectedTotal)
+            {
+                _logger.LogWarning($"Booking {booking.BookingId} TotalAmount mismatch. Current: {booking.TotalAmount}, Expected: {expectedTotal} (Seats: {seatsTotal}, Services: {servicesTotal}). Updating...");
+                booking.TotalAmount = expectedTotal;
+                await _context.SaveChangesAsync();
+            }
+
             var transactionId = GenerateTransactionId();
             _logger.LogInformation($"Generated TransactionId: {transactionId}");
+            _logger.LogInformation($"Payment amount: {booking.TotalAmount} (Seats: {seatsTotal}, Services: {servicesTotal})");
 
             var payment = new Payment
             {

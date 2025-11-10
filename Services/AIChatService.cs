@@ -40,11 +40,12 @@ namespace FlightBooking.Services
                     chatHistory = recentHistory.Select(m => (m.UserMessage, m.AIResponse)).ToList();
                 }
 
-                // Gọi Gemini AI để lấy phản hồi
+                // Gọi Gemini AI để lấy phản hồi (truyền isAdmin để phân biệt)
                 var aiResponse = await _geminiService.GetAIResponseAsync(
                     request.UserMessage,
                     request.UserId,
-                    chatHistory);
+                    chatHistory,
+                    request.IsAdmin);
 
                 // Lưu vào database
                 var aiChatMessage = new AIChatMessage
@@ -131,6 +132,28 @@ namespace FlightBooking.Services
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
